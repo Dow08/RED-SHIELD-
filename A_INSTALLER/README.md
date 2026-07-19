@@ -12,12 +12,10 @@ Ce dossier liste ce que je ne peux pas installer automatiquement à ta place. Le
 
 ## 🔧 À installer par toi (au moment voulu)
 
-### 1. nmap — pour le scan de vulnérabilités (Jalon 3)
-Non requis avant le Jalon 3. Deux options :
-- **winget** (le plus simple) : `winget install Insecure.Nmap`
-- ou télécharger l'installeur : https://nmap.org/download.html (section Windows)
-
-Vérifier ensuite : `nmap --version`
+### 1. nmap — ✅ INSTALLÉ (7.80, via winget)
+Installé le 2026-07-19 dans `C:\Program Files (x86)\Nmap\`. Le module de scan le localise
+automatiquement (même hors PATH). Scan + croisement CVE opérationnels (onglet Recon).
+Rien à faire. (Réinstaller si besoin : `winget install Insecure.Nmap`.)
 
 ### 2. Clés API des connecteurs — pour l'enrichissement (Jalon 2)
 Optionnel. À renseigner dans `.env` (copié depuis `.env.example`) **et** passer
