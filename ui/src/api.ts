@@ -37,6 +37,7 @@ export interface LogEntry { ts: string; level: string; module: string; message: 
 export interface Hop { hop: number; ip: string; dns: string | null; city: string | null; country: string | null; lat: number | null; lon: number | null; private: boolean; }
 export interface TraceResult { target: string; hops: Hop[]; public_ip: string | null; vpn_active: boolean; vpn_adapter: string | null; geo_available: boolean; running: boolean; error: string | null; }
 export interface WifiNet { ssid: string; auth: string; encryption: string; channel: string; bssid: string; signal: number; risk: string; reason: string; }
+export interface CrackResult { found: string | null; tried: number; algo: string; error: string | null; }
 export interface Snapshot { id: number; taken_at: string; exposure_score: number; band: string; total: number; safe: number; watch: number; suspect: number; crit: number; }
 
 async function get<T>(path: string): Promise<T> {
@@ -64,6 +65,11 @@ export const api = {
     await fetch(BASE + "/trace/run" + (target ? `?target=${encodeURIComponent(target)}` : ""), { method: "POST" });
   },
   wifi: () => get<{ networks: WifiNet[]; message: string }>("/wifi/networks"),
+  crack: async (payload: { algo: string; target: string; salt?: string; iterations?: number; dklen?: number; words: string[] }): Promise<CrackResult> => {
+    const res = await fetch(BASE + "/crack", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    if (!res.ok) throw new Error("crack");
+    return res.json();
+  },
   reportUrl: BASE + "/report/markdown",
   logsExportUrl: BASE + "/diagnostic/logs/export",
 };

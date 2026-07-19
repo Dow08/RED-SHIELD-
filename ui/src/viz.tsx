@@ -134,10 +134,12 @@ export function BandwidthChart({ history }: { history: { d: number; u: number }[
 
 /* ---------------- Network graph (réel, survol + zoom/pan) ---------------- */
 interface GNode { x: number; y: number; r: number; s: string; label: string; ip: string; parts: number[]; }
-export function NetworkGraph({ conns, view }: { conns: ScoredConnection[]; view: string }) {
+export function NetworkGraph({ conns, view, onSelect }: { conns: ScoredConnection[]; view: string; onSelect?: (ip: string) => void }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const state = useRef<{ conns: ScoredConnection[]; view: string; dirty: boolean }>({ conns, view, dirty: true });
   const mouse = useRef<{ x: number; y: number; on: boolean }>({ x: 0, y: 0, on: false });
+  const onSelectRef = useRef(onSelect);
+  onSelectRef.current = onSelect;
   useEffect(() => { state.current = { conns, view, dirty: true }; }, [conns, view]);
   useEffect(() => {
     const cv = ref.current!;
@@ -150,6 +152,19 @@ export function NetworkGraph({ conns, view }: { conns: ScoredConnection[]; view:
     const onMove = (e: PointerEvent) => { const r = cv.getBoundingClientRect(); mouse.current = { x: (e.clientX - r.left) * (W / r.width), y: (e.clientY - r.top) * (H / r.height), on: true }; };
     const onLeave = () => { mouse.current.on = false; };
     cv.addEventListener("pointermove", onMove); cv.addEventListener("pointerleave", onLeave);
+    // clic sur un nœud (distinct du glisser) → sélection de l'endpoint
+    let downX = 0, downY = 0;
+    const onDownClick = (e: PointerEvent) => { downX = e.clientX; downY = e.clientY; };
+    const onUpClick = (e: PointerEvent) => {
+      if (Math.hypot(e.clientX - downX, e.clientY - downY) > 5) return;
+      const r = cv.getBoundingClientRect();
+      const mx = (e.clientX - r.left) * (W / r.width), my = (e.clientY - r.top) * (H / r.height);
+      for (const n of nodes) {
+        const nx = n.x * vw.s + vw.ox, ny = n.y * vw.s + vw.oy;
+        if (Math.hypot(mx - nx, my - ny) < n.r * vw.s + 6) { onSelectRef.current?.(n.ip); break; }
+      }
+    };
+    cv.addEventListener("pointerdown", onDownClick); cv.addEventListener("pointerup", onUpClick);
     let nodes: GNode[] = [];
     let dev = { x: W * 0.16, y: H / 2 };
     const reduce = reduceMotion();
@@ -224,7 +239,7 @@ export function NetworkGraph({ conns, view }: { conns: ScoredConnection[]; view:
       raf = requestAnimationFrame(draw);
     };
     draw();
-    return () => { cancelAnimationFrame(raf); ro.disconnect(); detachPZ(); cv.removeEventListener("pointermove", onMove); cv.removeEventListener("pointerleave", onLeave); };
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); detachPZ(); cv.removeEventListener("pointermove", onMove); cv.removeEventListener("pointerleave", onLeave); cv.removeEventListener("pointerdown", onDownClick); cv.removeEventListener("pointerup", onUpClick); };
   }, []);
   return <canvas ref={ref} />;
 }
@@ -250,16 +265,29 @@ export function TraceMap({ trace }: { trace: TraceResult | null }) {
     const inLand = (lon: number, lat: number) => CONTS.some(([cx, cy, rx, ry]) => ((lon - cx) / rx) ** 2 + ((lat - cy) / ry) ** 2 <= 1);
     const T = (x: number, y: number): [number, number] => [x * vw.s + vw.ox, y * vw.s + vw.oy];
     const reduce = reduceMotion();
+    // image de mappemonde équirectangulaire (bundlée, hors-ligne)
+    const img = new Image();
+    let imgOk = false;
+    img.onload = () => { imgOk = true; };
+    img.src = "/worldmap.jpg";
     let parts = [0, 0.4, 0.8], raf = 0, t = 0;
     const draw = () => {
       t += 0.016;
       ctx.clearRect(0, 0, W, H);
-      ctx.strokeStyle = "#12181f"; ctx.lineWidth = 1;
+      if (imgOk) {
+        ctx.globalAlpha = 0.55;
+        ctx.drawImage(img, vw.ox, vw.oy, W * vw.s, H * vw.s);
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = "rgba(8,10,15,0.5)"; // teinte sombre pour cohérence avec le thème
+        ctx.fillRect(0, 0, W, H);
+      } else {
+        ctx.fillStyle = cvar("--card-b", "#202a3a");
+        const step = vw.s >= 3 ? 2 : 3;
+        for (let lon = -180; lon < 180; lon += step) for (let lat = -86; lat < 86; lat += step) if (inLand(lon, lat)) { const [x, y] = proj(lon, lat); const [px, py] = T(x, y); ctx.beginPath(); ctx.arc(px, py, 1.1, 0, 7); ctx.fill(); }
+      }
+      ctx.strokeStyle = "rgba(120,220,225,0.10)"; ctx.lineWidth = 1;
       for (let lon = -180; lon <= 180; lon += 30) { const [x] = proj(lon, 0); const [ax, ay] = T(x, 0), [bx, by] = T(x, H); ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke(); }
       for (let lat = -90; lat <= 90; lat += 30) { const [, y] = proj(0, lat); const [ax, ay] = T(0, y), [bx, by] = T(W, y); ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke(); }
-      ctx.fillStyle = cvar("--card-b", "#202a3a");
-      const step = vw.s >= 3 ? 2 : 3;
-      for (let lon = -180; lon < 180; lon += step) for (let lat = -86; lat < 86; lat += step) if (inLand(lon, lat)) { const [x, y] = proj(lon, lat); const [px, py] = T(x, y); ctx.beginPath(); ctx.arc(px, py, 1.1, 0, 7); ctx.fill(); }
       const tr = dataRef.current;
       const geoHops = (tr?.hops || []).filter((h) => h.lat != null && h.lon != null);
       const pts = geoHops.map((h) => { const [x, y] = proj(h.lon!, h.lat!); const [px, py] = T(x, y); return { px, py, h }; });

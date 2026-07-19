@@ -16,6 +16,7 @@ from app.core.bus import EventBus
 from app.core.registry import Registry
 from app.modules.base import ModuleStatus
 from app.modules.bandwidth import BandwidthModule
+from app.modules.cracker import CrackerModule, CrackRequest
 from app.modules.diagnostic import DiagnosticModule
 from app.modules.persistence import PersistenceModule
 from app.modules.scoring import ScoringModule
@@ -39,6 +40,7 @@ def register_modules(registry: Registry, bus: EventBus) -> None:
     registry.register(PersistenceModule(bus))
     registry.register(TraceModule(bus))
     registry.register(WifiModule(bus))
+    registry.register(CrackerModule(bus))
 
 
 def create_app() -> FastAPI:
@@ -142,6 +144,10 @@ def create_app() -> FastAPI:
         if module is None:
             return {"networks": [], "message": "module WiFi indisponible"}
         return module.result()
+
+    @app.post("/crack")
+    def crack(req: CrackRequest):
+        return _require("cracker").crack(req)
 
     @app.get("/report/markdown", response_class=PlainTextResponse)
     def report_markdown():

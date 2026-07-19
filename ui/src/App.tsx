@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "./api";
-import type { ScoredConnection, Severity, TraceResult, WifiNet } from "./api";
+import type { CrackResult, ScoredConnection, Severity, TraceResult, WifiNet } from "./api";
 import { usePolling } from "./hooks";
 import { BandwidthChart, NetworkGraph, Sparkline, TraceMap } from "./viz";
 
@@ -67,7 +67,7 @@ function ConnRow({ c, showCols }: { c: ScoredConnection; showCols: Record<string
 }
 
 /* ============ DASHBOARD ============ */
-function Dashboard({ conns, exposure, modules, logs, bwHist, scoreHist, top, trace, onGo }: any) {
+function Dashboard({ conns, exposure, modules, logs, bwHist, scoreHist, top, trace, onGo, onSelect }: any) {
   const risky = (conns as ScoredConnection[]).filter((c) => c.severity === "suspect" || c.severity === "crit").sort((a, b) => b.risk - a.risk);
   const topConns = [...(conns as ScoredConnection[])].sort((a, b) => b.risk - a.risk).slice(0, 4);
   const [sub, setSub] = useState<"debit" | "top">("debit");
@@ -136,7 +136,8 @@ function Dashboard({ conns, exposure, modules, logs, bwHist, scoreHist, top, tra
         </Card>
 
         <Card title="Carte réseau (aperçu)" right={<a onClick={() => onGo("carte")}>ouvrir →</a>}>
-          <div className="stage"><NetworkGraph conns={conns} view="tous" /></div>
+          <div className="stage"><NetworkGraph conns={conns} view="tous" onSelect={onSelect} /></div>
+          <div className="disc">Clique une IP pour tracer son chemin sur la carte du monde.</div>
         </Card>
       </div>
 
@@ -257,14 +258,14 @@ function Bouclier({ conns }: { conns: ScoredConnection[] }) {
 }
 
 /* ============ CARTE RÉSEAU ============ */
-function CarteReseau({ conns, trace, onRun }: { conns: ScoredConnection[]; trace: TraceResult | null; onRun: (t: string) => void }) {
+function CarteReseau({ conns, trace, onRun, onSelect }: { conns: ScoredConnection[]; trace: TraceResult | null; onRun: (t: string) => void; onSelect: (ip: string) => void }) {
   const [view, setView] = useState("sortant");
   const [target, setTarget] = useState("1.1.1.1");
   const labels: Record<string, string> = { sortant: "Sortant", entrant: "Entrant", local: "Local (LAN)", tous: "Tous" };
   return (
     <>
       <Card title="Carte réseau" right={<span className="seg">{Object.keys(labels).map((v) => <button key={v} className={view === v ? "on" : ""} onClick={() => setView(v)}>{labels[v]}</button>)}</span>}>
-        <div className="stage"><NetworkGraph conns={conns} view={view} /></div>
+        <div className="stage"><NetworkGraph conns={conns} view={view} onSelect={onSelect} /></div>
         <div className="legend">
           <span><span className="d" style={{ background: "var(--accent)" }}></span>Cet appareil</span>
           <span><span className="d" style={{ background: "var(--safe)" }}></span>Sain</span>
@@ -365,6 +366,66 @@ function Recon({ wifi }: { wifi: { networks: WifiNet[]; message: string } | null
   );
 }
 
+/* ============ OFFENSIF (cracker de hash) ============ */
+function Offensif() {
+  const [algo, setAlgo] = useState("md5");
+  const [target, setTarget] = useState("");
+  const [salt, setSalt] = useState("");
+  const [iters, setIters] = useState(100000);
+  const [words, setWords] = useState("");
+  const [res, setRes] = useState<CrackResult | null>(null);
+  const [busy, setBusy] = useState(false);
+  const pbkdf2 = algo.startsWith("pbkdf2");
+  const run = async () => {
+    setBusy(true); setRes(null);
+    try {
+      const r = await api.crack({ algo, target: target.trim(), salt, iterations: iters, dklen: 32, words: words.split("\n") });
+      setRes(r);
+    } catch {
+      setRes({ found: null, tried: 0, algo, error: "moteur injoignable" });
+    }
+    setBusy(false);
+  };
+  const ta: React.CSSProperties = { width: "100%", background: "var(--card-solid)", border: "1px solid var(--card-b)", borderRadius: 8, color: "var(--ink)", fontFamily: "var(--mono)", fontSize: 12, padding: 10 };
+  return (
+    <div className="grid">
+      <div className="col">
+        <Card title="Cracker de hash (dictionnaire)" right="CTF / pentest autorisé">
+          <div className="note">Outil offensif repris de <b>sk-security-toolkit</b>. 100 % local, aucune donnée envoyée. Fournis le hash cible et ta wordlist — <b>usage sur données autorisées uniquement</b>.</div>
+          <div className="row"><span className="nm">Algorithme</span><span className="seg" style={{ marginLeft: "auto" }}>{["md5", "sha1", "sha256", "pbkdf2_sha256"].map((a) => <button key={a} className={algo === a ? "on" : ""} onClick={() => setAlgo(a)}>{a}</button>)}</span></div>
+          <div className="row"><span className="nm">Hash cible (hex)</span><input className="key" style={{ marginLeft: "auto", width: 280, letterSpacing: 0 }} value={target} onChange={(e) => setTarget(e.target.value)} placeholder="5f4dcc3b5aa765d61d8327deb882cf99" /></div>
+          {pbkdf2 && (
+            <>
+              <div className="row"><span className="nm">Sel (hex)</span><input className="key" style={{ marginLeft: "auto", width: 200, letterSpacing: 0 }} value={salt} onChange={(e) => setSalt(e.target.value)} /></div>
+              <div className="row"><span className="nm">Itérations</span><input className="key" type="number" style={{ marginLeft: "auto", width: 120, letterSpacing: 0 }} value={iters} onChange={(e) => setIters(+e.target.value)} /></div>
+            </>
+          )}
+          <div style={{ padding: "12px 16px" }}>
+            <div className="lbl" style={{ marginBottom: 6 }}>Wordlist (un mot par ligne)</div>
+            <textarea value={words} onChange={(e) => setWords(e.target.value)} rows={6} style={ta} placeholder={"password\nadmin\n123456\nletmein"} />
+          </div>
+          <div className="actions"><button className="btn" onClick={run} disabled={busy || !target || !words.trim()}>{busy ? "Crack en cours…" : "Lancer le crack"}</button></div>
+          {res && (
+            <div className="rcard">
+              {res.error ? <div style={{ color: "var(--crit)" }}>Erreur : {res.error}</div>
+                : res.found ? <div><b style={{ color: "var(--safe)" }}>Trouvé :</b> <span className="mono">{res.found}</span> <span className="muted">({res.tried} essais)</span></div>
+                  : <div className="muted">Non trouvé ({res.tried} essais). Élargis la wordlist.</div>}
+            </div>
+          )}
+        </Card>
+      </div>
+      <div className="col">
+        <Card title="OSINT passif" right="Jalon 2 · air-gapped OFF">
+          <div className="note">Recon passif (subdomains via crt.sh, reverse-IP, ASN) repris du toolkit — nécessite de désactiver le mode air-gapped (appels externes). À venir.</div>
+        </Card>
+        <Card title="Suggestions d'attaque" right="Jalon 3">
+          <div className="note">La logique de <b>sk-recon</b> (suggestions hydra/netexec/feroxbuster selon les services) sera greffée sur le scan nmap au Jalon 3.</div>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
 /* ============ CONNECTEURS ============ */
 function Connecteurs({ airgapped }: { airgapped: boolean }) {
   const items = ["VirusTotal", "AbuseIPDB", "GreyNoise", "Shodan", "Wazuh (SIEM)", "Microsoft Defender (EDR)", "LLM (rapport IA)"];
@@ -426,6 +487,7 @@ const TABS: [string, string, string?][] = [
   ["carte", "Carte réseau"],
   ["remediation", "Remédiation"],
   ["recon", "Recon & WiFi", "J3-J4"],
+  ["offensif", "Offensif"],
   ["connecteurs", "Connecteurs", "J2"],
   ["diagnostic", "Diagnostic"],
 ];
@@ -440,8 +502,11 @@ export default function App() {
   const top = usePolling(api.topTalkers, 5000);
   const logs = usePolling(() => api.logs(), 5000);
   const history = usePolling(api.history, 8000);
-  const trace = usePolling(() => api.trace(), 6000);
+  const [traceTarget, setTraceTarget] = useState("1.1.1.1");
+  const trace = usePolling(() => api.trace(traceTarget), 6000);
   const wifi = usePolling(api.wifi, 15000);
+  const runTrace = (t: string) => { setTraceTarget(t); api.traceRun(t); };
+  const selectEndpoint = (ip: string) => { runTrace(ip); setTab("carte"); };
 
   const [bwHist, setBwHist] = useState<{ d: number; u: number }[]>([]);
   const [scoreHist, setScoreHist] = useState<number[]>([]);
@@ -476,11 +541,12 @@ export default function App() {
         ))}
       </div>
 
-      {tab === "dashboard" && <Dashboard conns={conns} exposure={exposure.data} modules={mods} logs={logs.data || []} bwHist={bwHist} scoreHist={scoreHist} top={top.data || []} trace={trace.data} onGo={setTab} />}
+      {tab === "dashboard" && <Dashboard conns={conns} exposure={exposure.data} modules={mods} logs={logs.data || []} bwHist={bwHist} scoreHist={scoreHist} top={top.data || []} trace={trace.data} onGo={setTab} onSelect={selectEndpoint} />}
       {tab === "bouclier" && <Bouclier conns={conns} />}
-      {tab === "carte" && <CarteReseau conns={conns} trace={trace.data} onRun={(t) => api.traceRun(t)} />}
+      {tab === "carte" && <CarteReseau conns={conns} trace={trace.data} onRun={runTrace} onSelect={selectEndpoint} />}
       {tab === "remediation" && <Remediation conns={conns} />}
       {tab === "recon" && <Recon wifi={wifi.data} />}
+      {tab === "offensif" && <Offensif />}
       {tab === "connecteurs" && <Connecteurs airgapped={airgapped} />}
       {tab === "diagnostic" && <Diagnostic logs={logs.data || []} history={history.data || []} />}
 
