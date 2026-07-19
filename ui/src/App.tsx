@@ -193,6 +193,7 @@ function Dashboard({ conns, exposure, modules, logs, bwHist, scoreHist, top, tra
                     <div className="recap"><span className="ic">🔒</span>VPN<span className="v" style={{ color: trace.vpn_active ? "var(--safe)" : "var(--faint)" }}>{trace.vpn_active ? (trace.vpn_adapter || "actif") : "inactif"}</span></div>
                     <div className="recap"><span className="ic">🛰️</span>Sauts<span className="v">{trace.hops.length}</span></div>
                     <div className="disc">{trace.hops.filter((h: any) => h.city || h.country).map((h: any) => h.city || h.country).slice(0, 5).join(" → ") || "chemin en cours de géolocalisation"}</div>
+                    <div className="stage" style={{ marginTop: 8 }}><TraceMap trace={trace} /></div>
                   </>
                 ) : <div className="empty">{trace?.running ? "Traceroute en cours…" : "Ouvre l'onglet Carte réseau pour lancer un tracé"}</div>}
               </Card>
@@ -314,14 +315,14 @@ function Bouclier({ conns }: { conns: ScoredConnection[] }) {
 }
 
 /* ============ CARTE RÉSEAU ============ */
-function CarteReseau({ conns, trace, onRun, onSelect }: { conns: ScoredConnection[]; trace: TraceResult | null; onRun: (t: string) => void; onSelect: (ip: string) => void }) {
+function CarteReseau({ conns, trace, traceLabel, onRun, onSelect }: { conns: ScoredConnection[]; trace: TraceResult | null; traceLabel: string; onRun: (t: string) => void; onSelect: (ip: string) => void }) {
   const [view, setView] = useState("sortant");
   const [target, setTarget] = useState("1.1.1.1");
   const labels: Record<string, string> = { sortant: "Sortant", entrant: "Entrant", local: "Local (LAN)", tous: "Tous" };
   return (
     <>
       <Card title="Carte réseau" right={<span className="seg">{Object.keys(labels).map((v) => <button key={v} className={view === v ? "on" : ""} onClick={() => setView(v)}>{labels[v]}</button>)}</span>}>
-        <div className="stage"><NetworkGraph conns={conns} view={view} onSelect={onSelect} /></div>
+        <div className="stage"><NetworkGraph conns={conns} view={view} onSelect={onSelect} trace={trace} /></div>
         <div className="legend">
           <span><span className="d" style={{ background: "var(--accent)" }}></span>Cet appareil</span>
           <span><span className="d" style={{ background: "var(--safe)" }}></span>Sain</span>
@@ -332,7 +333,7 @@ function CarteReseau({ conns, trace, onRun, onSelect }: { conns: ScoredConnectio
       </Card>
       <div style={{ height: 12 }} />
       <Card title="Tracé de connexion — carte du monde" right={<><div className="search" style={{ marginRight: 8 }}><input value={target} onChange={(e) => setTarget(e.target.value)} style={{ width: 120 }} /></div><button className="btn ghost" onClick={() => onRun(target)}>Lancer le tracé</button></>}>
-        <div className="stage"><TraceMap trace={trace} /></div>
+        <div className="stage"><TraceMap trace={trace} destLabel={traceLabel} /></div>
         <div className="disc">
           Molette = zoom · glisser = déplacer.{" "}
           {trace?.vpn_active && <b style={{ color: "var(--safe)" }}>VPN {trace.vpn_adapter} · </b>}
@@ -394,6 +395,13 @@ function Recon({ wifi, lan, scan, onScan }: { wifi: { networks: WifiNet[]; messa
   const rc = (r: string) => (r === "crit" ? "var(--crit)" : r === "watch" ? "var(--watch)" : "var(--safe)");
   const [target, setTarget] = useState("scanme.nmap.org");
   const [mode, setMode] = useState("discret");
+  const [help, setHelp] = useState("");
+  const PRESETS = [
+    { label: "Ma machine", target: "127.0.0.1", mode: "discret", help: "Scanne ta propre machine (services en écoute). Sans risque, toujours autorisé — idéal pour un premier test." },
+    { label: "Réseau local /24", target: "192.168.1.0/24", mode: "discret", help: "Balaye ton sous-réseau local (top 100 ports) pour découvrir les hôtes et services exposés." },
+    { label: "scanme.nmap.org", target: "scanme.nmap.org", mode: "discret", help: "Cible de test officielle de nmap, explicitement autorisée pour l'entraînement." },
+    { label: "Scan complet 1-1024", target: "", mode: "complet", help: "Ports système 1-1024 + détection de version sur la cible courante. Plus long mais plus exhaustif." },
+  ];
   return (
     <div className="grid">
       <div className="col">
@@ -407,6 +415,13 @@ function Recon({ wifi, lan, scan, onScan }: { wifi: { networks: WifiNet[]; messa
             </span>
             <button className="btn" disabled={!target || scan?.running || scan?.nmap_available === false} onClick={() => onScan(target, mode)}>{scan?.running ? "Scan en cours…" : "Lancer le scan"}</button>
           </div>
+          <div style={{ padding: "0 14px 8px", display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+            <span className="lbl">Presets</span>
+            {PRESETS.map((p) => (
+              <button key={p.label} className="chip" style={{ cursor: "pointer" }} onClick={() => { if (p.target) setTarget(p.target); setMode(p.mode); setHelp(p.help); }}>{p.label}</button>
+            ))}
+          </div>
+          {help && <div className="disc" style={{ padding: "0 14px 10px" }}>ℹ️ {help}</div>}
           {scan?.nmap_available === false && <div className="empty">nmap non installé — voir le dossier A_INSTALLER.</div>}
           {scan?.error && <div className="empty">Erreur : {scan.error}</div>}
           {(scan?.hosts || []).map((h) => (
@@ -634,8 +649,14 @@ export default function App() {
   const beaconing = usePolling(api.beaconing, 10000);
   const lan = usePolling(api.lan, 20000);
   const scan = usePolling(api.scan, 4000);
+  const [traceLabel, setTraceLabel] = useState("");
   const runTrace = (t: string) => { setTraceTarget(t); api.traceRun(t); };
-  const selectEndpoint = (ip: string) => { runTrace(ip); setTab("carte"); };
+  const selectEndpoint = (ip: string) => {
+    const c = (connections.data || []).find((x) => x.remote_addr === ip);
+    setTraceLabel(c ? `${c.process} → ${ip}` : ip);
+    runTrace(ip);
+    setTab("carte");
+  };
 
   const [bwHist, setBwHist] = useState<{ d: number; u: number }[]>([]);
   const [scoreHist, setScoreHist] = useState<number[]>([]);
@@ -659,7 +680,10 @@ export default function App() {
         <div className="gm"><div className="num" style={{ color: bandColor(exposure.data?.band ?? "faible") }}>{exposure.data?.score ?? "—"}</div><div><div className="lab">Exposition</div><div className="band" style={{ color: bandColor(exposure.data?.band ?? "faible") }}>{exposure.data ? bandLabel(exposure.data.band).replace("Exposition ", "") : "…"}</div></div></div>
         <div className="bw"><span><span className="k">↓ DL</span> <span className="dl mono">{fr(bwLast?.d ?? 0)}</span> <span className="k">Mo/s</span></span><span><span className="k">↑ UL</span> <span className="ul mono">{fr(bwLast?.u ?? 0)}</span> <span className="k">Mo/s</span></span></div>
         <div className="spacer"></div>
-        <div className={`pill ${airgapped ? "" : "off"}`}><span className="on"></span>Air-gapped&nbsp;<b>{airgapped ? "ACTIF" : "OFF"}</b></div>
+        <div className={`pill ${airgapped ? "" : "off"}`} title="Mode air-gapped : coupe TOUT appel réseau externe (VirusTotal, géolocalisation en ligne, LLM…). Les analyses restent 100 % locales. À désactiver (dans .env) pour brancher les connecteurs.">
+          <span className="on"></span>Air-gapped&nbsp;<b>{airgapped ? "ACTIF" : "OFF"}</b>
+          <span style={{ marginLeft: 6, color: "var(--faint)", cursor: "help" }}>ⓘ</span>
+        </div>
       </div>
 
       {offline && <div className="note" style={{ borderRadius: 12, marginBottom: 12 }}>⚠️ Moteur injoignable sur <b>127.0.0.1:8787</b>. Lance le backend : <span className="mono">py -m uvicorn app.main:app</span> (depuis <span className="mono">engine/</span>).</div>}
@@ -672,7 +696,7 @@ export default function App() {
 
       {tab === "dashboard" && <Dashboard conns={conns} exposure={exposure.data} modules={mods} logs={logs.data || []} bwHist={bwHist} scoreHist={scoreHist} top={top.data || []} trace={trace.data} beaconing={beaconing.data || []} onGo={setTab} onSelect={selectEndpoint} />}
       {tab === "bouclier" && <Bouclier conns={conns} />}
-      {tab === "carte" && <CarteReseau conns={conns} trace={trace.data} onRun={runTrace} onSelect={selectEndpoint} />}
+      {tab === "carte" && <CarteReseau conns={conns} trace={trace.data} traceLabel={traceLabel} onRun={runTrace} onSelect={selectEndpoint} />}
       {tab === "remediation" && <Remediation conns={conns} />}
       {tab === "recon" && <Recon wifi={wifi.data} lan={lan.data} scan={scan.data} onScan={(t, m) => api.scanRun(t, m)} />}
       {tab === "offensif" && <Offensif />}

@@ -134,13 +134,13 @@ export function BandwidthChart({ history }: { history: { d: number; u: number }[
 
 /* ---------------- Network graph (réel, survol + zoom/pan) ---------------- */
 interface GNode { x: number; y: number; r: number; s: string; label: string; ip: string; parts: number[]; }
-export function NetworkGraph({ conns, view, onSelect }: { conns: ScoredConnection[]; view: string; onSelect?: (ip: string) => void }) {
+export function NetworkGraph({ conns, view, onSelect, trace }: { conns: ScoredConnection[]; view: string; onSelect?: (ip: string) => void; trace?: TraceResult | null }) {
   const ref = useRef<HTMLCanvasElement>(null);
-  const state = useRef<{ conns: ScoredConnection[]; view: string; dirty: boolean }>({ conns, view, dirty: true });
+  const state = useRef<{ conns: ScoredConnection[]; view: string; trace: TraceResult | null; dirty: boolean }>({ conns, view, trace: trace || null, dirty: true });
   const mouse = useRef<{ x: number; y: number; on: boolean }>({ x: 0, y: 0, on: false });
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
-  useEffect(() => { state.current = { conns, view, dirty: true }; }, [conns, view]);
+  useEffect(() => { state.current = { conns, view, trace: trace || null, dirty: true }; }, [conns, view, trace]);
   useEffect(() => {
     const cv = ref.current!;
     const ctx = cv.getContext("2d")!;
@@ -170,17 +170,26 @@ export function NetworkGraph({ conns, view, onSelect }: { conns: ScoredConnectio
     const reduce = reduceMotion();
     let t = 0, raf = 0;
     const build = () => {
-      const { conns, view } = state.current;
-      const byRemote = new Map<string, { sev: string; label: string; ip: string }>();
-      for (const c of conns) {
-        const priv = isPrivate(c.remote_addr);
-        if (view === "sortant" && priv) continue;
-        if (view === "local" && !priv) continue;
-        if (view === "entrant") continue;
-        const prev = byRemote.get(c.remote_addr);
-        if (!prev || sevRank[c.severity] > sevRank[prev.sev]) byRemote.set(c.remote_addr, { sev: c.severity, label: c.remote_dns || c.remote_addr, ip: c.remote_addr });
+      const { conns, view, trace } = state.current;
+      let list: { sev: string; label: string; ip: string }[];
+      if (view === "entrant") {
+        // Pas de connexions entrantes suivies au Jalon 1 → on montre le chemin vers l'IP publique de la box (via le trace).
+        list = [];
+        const hops = trace?.hops || [];
+        const gw = hops.find((h) => h.private);
+        if (gw) list.push({ sev: "safe", label: `Passerelle ${gw.ip}`, ip: gw.ip });
+        if (trace?.public_ip) list.push({ sev: "watch", label: `IP publique ${trace.public_ip}`, ip: trace.public_ip });
+      } else {
+        const byRemote = new Map<string, { sev: string; label: string; ip: string }>();
+        for (const c of conns) {
+          const priv = isPrivate(c.remote_addr);
+          if (view === "sortant" && priv) continue;
+          if (view === "local" && !priv) continue;
+          const prev = byRemote.get(c.remote_addr);
+          if (!prev || sevRank[c.severity] > sevRank[prev.sev]) byRemote.set(c.remote_addr, { sev: c.severity, label: c.remote_dns || c.remote_addr, ip: c.remote_addr });
+        }
+        list = [...byRemote.values()].slice(0, 40);
       }
-      const list = [...byRemote.values()].slice(0, 40);
       dev = { x: W * 0.16, y: H / 2 };
       const R = Math.min(W * 0.33, H * 0.42), cx = W * 0.62, cy = H / 2;
       nodes = list.map((it, i) => {
@@ -234,7 +243,7 @@ export function NetworkGraph({ conns, view, onSelect }: { conns: ScoredConnectio
       }
       if (nodes.length === 0) {
         ctx.fillStyle = cvar("--faint", "#586372"); ctx.font = "12px system-ui"; ctx.textAlign = "center";
-        ctx.fillText(view === "entrant" ? "Connexions entrantes : suivi au Jalon 2" : "Aucune connexion dans cette vue", W / 2, H / 2);
+        ctx.fillText(view === "entrant" ? "Aucune entrante — lance un tracé pour voir le chemin vers l'IP publique" : "Aucune connexion dans cette vue", W / 2, H / 2);
       }
       raf = requestAnimationFrame(draw);
     };
@@ -249,10 +258,12 @@ const CONTS: [number, number, number, number][] = [
   [-100, 48, 30, 20], [-95, 63, 44, 10], [-88, 13, 10, 9], [-60, -18, 17, 28],
   [12, 52, 24, 12], [20, 2, 23, 33], [92, 52, 52, 23], [78, 22, 12, 14], [112, 8, 16, 12], [134, -25, 15, 11],
 ];
-export function TraceMap({ trace }: { trace: TraceResult | null }) {
+export function TraceMap({ trace, destLabel }: { trace: TraceResult | null; destLabel?: string }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const dataRef = useRef<TraceResult | null>(trace);
+  const destRef = useRef<string | undefined>(destLabel);
   useEffect(() => { dataRef.current = trace; }, [trace]);
+  useEffect(() => { destRef.current = destLabel; }, [destLabel]);
   useEffect(() => {
     const cv = ref.current!;
     const ctx = cv.getContext("2d")!;
@@ -302,12 +313,17 @@ export function TraceMap({ trace }: { trace: TraceResult | null }) {
       if (pts.length > 1) parts.forEach((p) => { const seg = p * (pts.length - 1), i = Math.min(Math.floor(seg), pts.length - 2), f = seg - i; const a = pts[i], b = pts[i + 1]; const cx = (a.px + b.px) / 2, cy = (a.py + b.py) / 2 - Math.hypot(b.px - a.px, b.py - a.py) * 0.2; const u = 1 - f; const x = u * u * a.px + 2 * u * f * cx + f * f * b.px, y = u * u * a.py + 2 * u * f * cy + f * f * b.py; ctx.beginPath(); ctx.fillStyle = cm.gold; ctx.globalAlpha = 0.9; ctx.arc(x, y, 2.2, 0, 7); ctx.fill(); ctx.globalAlpha = 1; });
       pts.forEach((pt, i) => {
         const isDest = i === pts.length - 1; const c = isDest ? cm.crit : cm.gold;
+        if (isDest) { ctx.beginPath(); ctx.fillStyle = c; ctx.globalAlpha = 0.12 + 0.1 * Math.sin(t * 3); ctx.arc(pt.px, pt.py, 12, 0, 7); ctx.fill(); ctx.globalAlpha = 1; }
         ctx.beginPath(); ctx.fillStyle = c; ctx.globalAlpha = 0.22; ctx.arc(pt.px, pt.py, 7, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
         ctx.beginPath(); ctx.fillStyle = c; ctx.arc(pt.px, pt.py, 3.4, 0, 7); ctx.fill();
         ctx.beginPath(); ctx.fillStyle = "#0a0c10"; ctx.arc(pt.px, pt.py, 1.7, 0, 7); ctx.fill();
-        ctx.textAlign = "left"; ctx.fillStyle = cm.ink; ctx.font = "700 9.5px Consolas, monospace";
-        ctx.fillText(`${pt.h.country || pt.h.ip}`, pt.px + 7, pt.py - 3);
-        ctx.fillStyle = cm.faint; ctx.font = "8.5px Consolas, monospace"; ctx.fillText(pt.h.city || pt.h.ip, pt.px + 7, pt.py + 7);
+        ctx.textAlign = "left";
+        const title = isDest && destRef.current ? destRef.current : (pt.h.country || pt.h.ip);
+        ctx.fillStyle = cm.ink; ctx.font = "700 9.5px Consolas, monospace";
+        ctx.fillText(title, pt.px + 8, pt.py - 4);
+        ctx.fillStyle = cm.faint; ctx.font = "8.5px Consolas, monospace";
+        if (pt.h.city) ctx.fillText(pt.h.city, pt.px + 8, pt.py + 5);
+        ctx.fillText(pt.h.ip, pt.px + 8, pt.py + (pt.h.city ? 15 : 5));
       });
       if (pts.length === 0) {
         ctx.fillStyle = cm.faint; ctx.font = "12px system-ui"; ctx.textAlign = "center";
