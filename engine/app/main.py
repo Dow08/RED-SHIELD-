@@ -7,20 +7,23 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 
 from app import __version__
 from app.config import settings
 from app.core.bus import EventBus
 from app.core.registry import Registry
+from app.modules.base import ModuleStatus
+from app.modules.bandwidth import BandwidthModule
+from app.modules.shield import ShieldModule
 
 logging.basicConfig(level=logging.INFO)
 
 
 def register_modules(registry: Registry, bus: EventBus) -> None:
-    """Enregistre les modules concrets. Rempli au fil des étapes (bouclier, diagnostic…)."""
-    # (Étape 2+) registry.register(ShieldModule(bus)) etc.
-    return None
+    """Enregistre les modules concrets (rempli au fil des étapes du Jalon 1)."""
+    registry.register(ShieldModule(bus))
+    registry.register(BandwidthModule(bus))
 
 
 def create_app() -> FastAPI:
@@ -50,6 +53,24 @@ def create_app() -> FastAPI:
     @app.get("/modules", response_model=list)
     def modules() -> list:
         return registry.list()
+
+    def _require(name: str):
+        module = registry.get(name)
+        if module is None or module.health() != ModuleStatus.ACTIVE:
+            raise HTTPException(status_code=503, detail=f"module '{name}' indisponible")
+        return module
+
+    @app.get("/shield/connections")
+    def shield_connections() -> list:
+        return _require("shield").get_connections()
+
+    @app.get("/shield/top-talkers")
+    def shield_top_talkers() -> list:
+        return _require("shield").top_talkers()
+
+    @app.get("/bandwidth")
+    def bandwidth():
+        return _require("bandwidth").get_rates()
 
     return app
 
