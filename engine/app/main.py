@@ -15,6 +15,7 @@ from app.core.bus import EventBus
 from app.core.registry import Registry
 from app.modules.base import ModuleStatus
 from app.modules.bandwidth import BandwidthModule
+from app.modules.scoring import ScoringModule
 from app.modules.shield import ShieldModule
 
 logging.basicConfig(level=logging.INFO)
@@ -24,6 +25,7 @@ def register_modules(registry: Registry, bus: EventBus) -> None:
     """Enregistre les modules concrets (rempli au fil des étapes du Jalon 1)."""
     registry.register(ShieldModule(bus))
     registry.register(BandwidthModule(bus))
+    registry.register(ScoringModule(bus))
 
 
 def create_app() -> FastAPI:
@@ -62,7 +64,11 @@ def create_app() -> FastAPI:
 
     @app.get("/shield/connections")
     def shield_connections() -> list:
-        return _require("shield").get_connections()
+        conns = _require("shield").get_connections()
+        scoring = registry.get("scoring")
+        if scoring is not None and scoring.health() == ModuleStatus.ACTIVE:
+            return scoring.score_connections(conns)
+        return conns
 
     @app.get("/shield/top-talkers")
     def shield_top_talkers() -> list:
@@ -71,6 +77,12 @@ def create_app() -> FastAPI:
     @app.get("/bandwidth")
     def bandwidth():
         return _require("bandwidth").get_rates()
+
+    @app.get("/exposure")
+    def exposure():
+        conns = _require("shield").get_connections()
+        scoring = _require("scoring")
+        return scoring.exposure_summary(scoring.score_connections(conns))
 
     return app
 

@@ -32,6 +32,7 @@ class Connection(BaseModel):
     local_addr: str = ""
     remote_addr: str
     remote_dns: str | None = None
+    dns_resolved: bool = False  # True = DNS résolu (nom ou None) ; False = pas encore résolu
     port: int
     protocol: str
     status: str
@@ -136,6 +137,13 @@ class ShieldModule(Module):
             info = self._proc_info(c.pid, cache)
             protocol = "tcp" if c.type == socket.SOCK_STREAM else "udp"
             remote_ip = c.raddr.ip
+            if resolve_dns:
+                resolved = remote_ip in self._dns_cache
+                dns = self._dns_cache.get(remote_ip)
+                if not resolved:
+                    self._rdns(remote_ip)  # planifie la résolution en arrière-plan
+            else:
+                resolved, dns = False, None
             conns.append(
                 Connection(
                     pid=c.pid,
@@ -144,7 +152,8 @@ class ShieldModule(Module):
                     lineage=self._lineage(c.pid, cache) if c.pid else "",
                     local_addr=f"{c.laddr.ip}:{c.laddr.port}" if c.laddr else "",
                     remote_addr=remote_ip,
-                    remote_dns=self._rdns(remote_ip) if resolve_dns else None,
+                    remote_dns=dns,
+                    dns_resolved=resolved,
                     port=c.raddr.port,
                     protocol=protocol,
                     status=c.status,
