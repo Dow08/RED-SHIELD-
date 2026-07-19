@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
-import type { Beacon, CrackResult, LanDevice, ScoredConnection, Severity, TimelineEvent, TraceResult, WifiNet } from "./api";
+import type { Beacon, CrackResult, LanDevice, ScanResult, ScoredConnection, Severity, TimelineEvent, TraceResult, WifiNet } from "./api";
 import { usePolling } from "./hooks";
 import { BandwidthChart, NetworkGraph, Sparkline, TraceMap } from "./viz";
 
@@ -388,13 +388,43 @@ function Remediation({ conns }: { conns: ScoredConnection[] }) {
 }
 
 /* ============ RECON ============ */
-function Recon({ wifi, lan }: { wifi: { networks: WifiNet[]; message: string } | null; lan: LanDevice[] | null }) {
+function Recon({ wifi, lan, scan, onScan }: { wifi: { networks: WifiNet[]; message: string } | null; lan: LanDevice[] | null; scan: ScanResult | null; onScan: (t: string, m: string) => void }) {
   const nets = wifi?.networks || [];
   const devices = lan || [];
   const rc = (r: string) => (r === "crit" ? "var(--crit)" : r === "watch" ? "var(--watch)" : "var(--safe)");
+  const [target, setTarget] = useState("scanme.nmap.org");
+  const [mode, setMode] = useState("discret");
   return (
     <div className="grid">
       <div className="col">
+        <Card title="Scan hôte (nmap + CVE)" right={scan && scan.nmap_available === false ? "nmap absent" : "prêt"}>
+          <div className="note">Cibles <b>autorisées uniquement</b> (propriété ou autorisation écrite). Chaque service détecté est croisé avec la base CVE locale → lien NVD.</div>
+          <div className="toolbar">
+            <input className="key" style={{ letterSpacing: 0, width: 220 }} value={target} onChange={(e) => setTarget(e.target.value)} placeholder="IP / CIDR / hôte" />
+            <span className="seg">
+              <button className={mode === "discret" ? "on" : ""} onClick={() => setMode("discret")}>Discret</button>
+              <button className={mode === "complet" ? "on" : ""} onClick={() => setMode("complet")}>Complet</button>
+            </span>
+            <button className="btn" disabled={!target || scan?.running || scan?.nmap_available === false} onClick={() => onScan(target, mode)}>{scan?.running ? "Scan en cours…" : "Lancer le scan"}</button>
+          </div>
+          {scan?.nmap_available === false && <div className="empty">nmap non installé — voir le dossier A_INSTALLER.</div>}
+          {scan?.error && <div className="empty">Erreur : {scan.error}</div>}
+          {(scan?.hosts || []).map((h) => (
+            <div key={h.ip}>
+              <div className="row"><span className="nm mono">{h.ip}</span><span className="ds">{[h.hostname, h.os].filter(Boolean).join(" · ")}</span></div>
+              {h.ports.map((p) => (
+                <div className="row" key={p.port}>
+                  <span className="nm mono">{p.port}/{p.protocol}</span>
+                  <span className="ds">{[p.service, p.product, p.version].filter(Boolean).join(" ")}</span>
+                  <span style={{ marginLeft: "auto", display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {p.cves.length === 0 ? <span className="stt on">sain</span> : p.cves.map((c) => <a key={c.cve} className="badge m" href={c.url} target="_blank" rel="noopener">{c.cve} · {c.cvss} ↗</a>)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ))}
+          {scan && !scan.running && scan.hosts.length === 0 && scan.target && !scan.error && <div className="empty">Aucun port ouvert détecté sur {scan.target}.</div>}
+        </Card>
         <Card title="Audit WiFi — alternative aircrack" right="natif Windows">
           <div className="note">Audit réel des réseaux à portée (chiffrement, signal). La <b>capture/crack de handshake</b> (aircrack) reste Linux + carte monitor (Jalon 4).</div>
           {wifi?.message && <div className="empty">{wifi.message}</div>}
@@ -419,10 +449,6 @@ function Recon({ wifi, lan }: { wifi: { networks: WifiNet[]; message: string } |
         </Card>
       </div>
       <div className="col">
-        <Card title="Scan hôte (nmap)" right="Jalon 3">
-          <div className="note">Le scan de cibles autorisées (ports/services/OS + CVE → NVD) arrive au <b>Jalon 3</b>. Installe nmap (voir dossier <span className="mono">A_INSTALLER</span>).</div>
-          <div className="row"><span className="nm">nmap</span><span className="ds">non installé</span><span className="stt off" style={{ marginLeft: "auto" }}>indisponible</span></div>
-        </Card>
         <Card title="WiFi offensif (aircrack)" right="Jalon 4 · Linux">
           <div className="note"><b>Linux uniquement</b> · carte monitor requise · cible autorisée obligatoire. Sous Windows, utilise l'<b>Audit WiFi</b> ci-contre.</div>
           <div className="row"><span className="nm">Interface monitor</span><span className="ds">non disponible (Windows)</span><span className="stt off" style={{ marginLeft: "auto" }}>indisponible</span></div>
@@ -596,6 +622,7 @@ export default function App() {
   const timeline = usePolling(api.timeline, 6000);
   const beaconing = usePolling(api.beaconing, 10000);
   const lan = usePolling(api.lan, 20000);
+  const scan = usePolling(api.scan, 4000);
   const runTrace = (t: string) => { setTraceTarget(t); api.traceRun(t); };
   const selectEndpoint = (ip: string) => { runTrace(ip); setTab("carte"); };
 
@@ -636,7 +663,7 @@ export default function App() {
       {tab === "bouclier" && <Bouclier conns={conns} />}
       {tab === "carte" && <CarteReseau conns={conns} trace={trace.data} onRun={runTrace} onSelect={selectEndpoint} />}
       {tab === "remediation" && <Remediation conns={conns} />}
-      {tab === "recon" && <Recon wifi={wifi.data} lan={lan.data} />}
+      {tab === "recon" && <Recon wifi={wifi.data} lan={lan.data} scan={scan.data} onScan={(t, m) => api.scanRun(t, m)} />}
       {tab === "offensif" && <Offensif />}
       {tab === "connecteurs" && <Connecteurs airgapped={airgapped} />}
       {tab === "diagnostic" && <Diagnostic logs={logs.data || []} history={history.data || []} timeline={timeline.data || []} beaconing={beaconing.data || []} />}

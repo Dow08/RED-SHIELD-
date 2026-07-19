@@ -22,6 +22,7 @@ from app.modules.firewall import FirewallModule, FwRequest
 from app.modules.lan import LanModule
 from app.modules.diagnostic import DiagnosticModule
 from app.modules.persistence import PersistenceModule
+from app.modules.scan import ScanModule, ScanRequest
 from app.modules.scoring import ScoringModule
 from app.modules.shield import ShieldModule
 from app.modules.trace import TraceModule
@@ -48,6 +49,7 @@ def register_modules(registry: Registry, bus: EventBus) -> None:
     registry.register(CrackerModule(bus))
     registry.register(FirewallModule(bus))
     registry.register(LanModule(bus))
+    registry.register(ScanModule(bus))
     registry.register(AnalyticsModule(bus, shield, scoring))
 
 
@@ -156,6 +158,22 @@ def create_app() -> FastAPI:
     @app.post("/crack")
     def crack(req: CrackRequest):
         return _require("cracker").crack(req)
+
+    @app.get("/scan")
+    def scan_get():
+        module = registry.get("scan")
+        return module.get() if module is not None else {}
+
+    @app.post("/scan/run")
+    def scan_run(req: ScanRequest):
+        module = registry.get("scan")
+        if module is None:
+            raise HTTPException(status_code=503, detail="module scan indisponible")
+        result = module.run_async(req.target, req.mode)
+        persist = registry.get("persistence")
+        if persist is not None and persist.health() == ModuleStatus.ACTIVE and result.get("ok"):
+            persist.add_audit("scan", f"{req.target} ({req.mode})")
+        return result
 
     @app.get("/analytics/timeline")
     def analytics_timeline(limit: int = 100):

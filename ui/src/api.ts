@@ -42,6 +42,10 @@ export interface TimelineEvent { ts: string; kind: string; severity: string; pro
 export interface Beacon { process: string; remote: string; period_s: number; count: number; regularity: number; }
 export interface LanDevice { ip: string; mac: string; vendor: string; }
 export interface FwResult { ok: boolean; dry_run?: boolean; command?: string; output?: string; error?: string; }
+export interface ScanCve { cve: string; cvss: number; severity: string; summary: string; url: string; }
+export interface ScanPort { port: number; protocol: string; state: string; service: string; product: string; version: string; cves: ScanCve[]; }
+export interface ScanHost { ip: string; hostname: string; os: string; ports: ScanPort[]; }
+export interface ScanResult { target: string; mode: string; hosts: ScanHost[]; running: boolean; error: string | null; nmap_available: boolean; }
 export interface Snapshot { id: number; taken_at: string; exposure_score: number; band: string; total: number; safe: number; watch: number; suspect: number; crit: number; }
 
 async function get<T>(path: string): Promise<T> {
@@ -81,6 +85,8 @@ export const api = {
   firewallBlock: (ip: string, dry_run: boolean) => post<FwResult>("/firewall/block", { ip, dry_run }),
   firewallUnblock: (ip: string) => post<FwResult>("/firewall/unblock", { ip, dry_run: false }),
   firewallRules: () => get<string[]>("/firewall/rules"),
+  scan: () => get<ScanResult>("/scan"),
+  scanRun: (target: string, mode: string) => post<{ ok: boolean; error?: string }>("/scan/run", { target, mode }),
   crack: async (payload: { algo: string; target: string; salt?: string; iterations?: number; dklen?: number; words: string[] }): Promise<CrackResult> => {
     const res = await fetch(BASE + "/crack", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     if (!res.ok) throw new Error("crack");
