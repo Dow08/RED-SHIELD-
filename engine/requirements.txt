@@ -1,0 +1,12 @@
+# RED — moteur (backend). Python 3.11+.
+fastapi
+uvicorn[standard]
+pydantic
+sqlmodel
+psutil
+keyring
+python-dotenv
+
+# Dev / tests
+pytest
+httpx
