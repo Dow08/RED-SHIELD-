@@ -41,6 +41,12 @@ class Cve(BaseModel):
     url: str
 
 
+class Compliance(BaseModel):
+    framework: str
+    control: str
+    note: str
+
+
 class Port(BaseModel):
     port: int
     protocol: str
@@ -49,6 +55,56 @@ class Port(BaseModel):
     product: str = ""
     version: str = ""
     cves: list[Cve] = []
+    osi_layer: int = 7
+    osi_label: str = "L7 Application"
+    compliance: list[Compliance] = []
+    suggestions: list[str] = []
+
+
+# --- Décomposition OSI (par service/port) ---
+_TLS_PORTS = {443, 8443, 993, 995, 465, 990, 636, 989, 5061}
+_ENC_TOKENS = ("ssl", "tls", "https", "imaps", "pop3s", "smtps", "ldaps")
+
+
+def _osi_of(port: int, service: str) -> tuple[int, str]:
+    s = (service or "").lower()
+    if port in _TLS_PORTS or any(tok in s for tok in _ENC_TOKENS):
+        return (6, "L6 Présentation (TLS)")
+    if not s:
+        return (4, "L4 Transport")
+    return (7, "L7 Application")
+
+
+# --- Conformité (indicatif) : service → contrôles CIS/ANSSI/NIST ---
+_COMPLIANCE: dict[str, list[dict]] = {
+    "ftp": [{"framework": "ANSSI", "control": "BP-028 R41", "note": "FTP en clair — préférer SFTP/FTPS"}, {"framework": "CIS", "control": "CIS 2", "note": "désactiver les services non chiffrés"}],
+    "telnet": [{"framework": "ANSSI", "control": "BP-028 R41", "note": "Telnet en clair — désactiver, utiliser SSH"}, {"framework": "NIST", "control": "PR.PT-4", "note": "protéger les communications"}],
+    "microsoft-ds": [{"framework": "CIS", "control": "CIS 9", "note": "restreindre SMB au pare-feu, désactiver SMBv1"}, {"framework": "NIST", "control": "PR.AC-5", "note": "segmentation réseau"}],
+    "netbios-ssn": [{"framework": "CIS", "control": "CIS 9", "note": "NetBIOS exposé — restreindre"}],
+    "ms-wbt-server": [{"framework": "CIS", "control": "CIS 18", "note": "RDP : activer NLA, restreindre l'accès"}, {"framework": "ANSSI", "control": "BP-028", "note": "limiter l'exposition RDP"}],
+    "http": [{"framework": "NIST", "control": "PR.DS-2", "note": "chiffrer les flux (HTTPS)"}],
+    "ssh": [{"framework": "ANSSI", "control": "BP-028 R55", "note": "durcir SSH (clés, root interdit)"}],
+    "smtp": [{"framework": "NIST", "control": "PR.DS-2", "note": "activer STARTTLS ; vérifier open relay"}],
+    "mysql": [{"framework": "CIS", "control": "CIS 5", "note": "ne pas exposer la base ; comptes forts"}],
+    "microsoft-sql-server": [{"framework": "CIS", "control": "CIS 5", "note": "ne pas exposer MSSQL ; auth forte"}],
+}
+
+# --- Suggestions d'attaque (esprit sk-recon) : service → pistes d'énumération ---
+_SUGGEST: dict[str, list[str]] = {
+    "http": ["feroxbuster / gobuster (énum. répertoires)", "nikto (vulns web)", "whatweb (fingerprint)"],
+    "https": ["feroxbuster (HTTPS)", "sslscan / testssl.sh (config TLS)", "nikto"],
+    "ssh": ["ssh-audit (durcissement)", "hydra ssh (brute-force si autorisé)"],
+    "ftp": ["vérifier le login anonyme", "hydra ftp"],
+    "microsoft-ds": ["enum4linux-ng", "netexec smb (shares/users)"],
+    "netbios-ssn": ["enum4linux-ng", "nbtscan"],
+    "ms-wbt-server": ["netexec rdp", "ncrack rdp (si autorisé)"],
+    "msrpc": ["rpcdump (impacket)", "enum via impacket"],
+    "domain": ["dnsenum", "dig AXFR (transfert de zone)"],
+    "mysql": ["netexec mysql", "hydra mysql"],
+    "microsoft-sql-server": ["netexec mssql", "mssqlclient (impacket)"],
+    "smtp": ["smtp-user-enum", "test open relay"],
+    "ldap": ["ldapsearch (anonymous bind)", "windapsearch"],
+}
 
 
 class Host(BaseModel):
@@ -136,9 +192,14 @@ class ScanModule(Module):
                 product = svc.get("product", "") if svc is not None else ""
                 version = svc.get("version", "") if svc is not None else ""
                 name = svc.get("name", "") if svc is not None else ""
+                portid = int(p.get("portid", "0"))
+                osi_layer, osi_label = _osi_of(portid, name)
+                compliance = [Compliance(**c) for c in _COMPLIANCE.get(name.lower(), [])]
+                suggestions = _SUGGEST.get(name.lower(), [])
                 ports.append(Port(
-                    port=int(p.get("portid", "0")), protocol=p.get("protocol", "tcp"), state="open",
+                    port=portid, protocol=p.get("protocol", "tcp"), state="open",
                     service=name, product=product, version=version, cves=self.match_cves(product, version),
+                    osi_layer=osi_layer, osi_label=osi_label, compliance=compliance, suggestions=suggestions,
                 ))
             hosts.append(Host(ip=ip, hostname=hostname, os=osn, ports=ports))
         return hosts

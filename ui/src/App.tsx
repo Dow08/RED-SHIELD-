@@ -413,12 +413,23 @@ function Recon({ wifi, lan, scan, onScan }: { wifi: { networks: WifiNet[]; messa
             <div key={h.ip}>
               <div className="row"><span className="nm mono">{h.ip}</span><span className="ds">{[h.hostname, h.os].filter(Boolean).join(" · ")}</span></div>
               {h.ports.map((p) => (
-                <div className="row" key={p.port}>
-                  <span className="nm mono">{p.port}/{p.protocol}</span>
-                  <span className="ds">{[p.service, p.product, p.version].filter(Boolean).join(" ")}</span>
-                  <span style={{ marginLeft: "auto", display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    {p.cves.length === 0 ? <span className="stt on">sain</span> : p.cves.map((c) => <a key={c.cve} className="badge m" href={c.url} target="_blank" rel="noopener">{c.cve} · {c.cvss} ↗</a>)}
-                  </span>
+                <div key={p.port} style={{ borderBottom: "1px solid var(--hair)", padding: "10px 16px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                    <span className="nm mono" style={{ minWidth: 70 }}>{p.port}/{p.protocol}</span>
+                    <span className="ds">{[p.service, p.product, p.version].filter(Boolean).join(" ")}</span>
+                    <span className="badge" style={{ borderColor: "var(--accent)", color: "var(--accent)" }}>{p.osi_label}</span>
+                    <span style={{ marginLeft: "auto", display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      {p.cves.length === 0 ? <span className="stt on">aucune CVE (base locale)</span> : p.cves.map((c) => <a key={c.cve} className="badge m" href={c.url} target="_blank" rel="noopener">{c.cve} · {c.cvss} ↗</a>)}
+                    </span>
+                  </div>
+                  {p.compliance.length > 0 && (
+                    <div className="rmeta" style={{ margin: "8px 0 0" }}>
+                      {p.compliance.map((c, i) => <span key={i} className="badge" title={c.note}>{c.framework} {c.control} — {c.note}</span>)}
+                    </div>
+                  )}
+                  {p.suggestions.length > 0 && (
+                    <div className="disc" style={{ padding: "6px 0 0" }}>⚔️ Pistes : {p.suggestions.join(" · ")}</div>
+                  )}
                 </div>
               ))}
             </div>

@@ -32,6 +32,12 @@ def test_scan_parse_and_cve():
     assert any(c.cve == "CVE-2023-38408" for c in open_ports[22].cves)
     # nginx -> aucune CVE en base locale
     assert open_ports[443].cves == []
+    # OSI : 443 = présentation (TLS), 22 = application
+    assert open_ports[443].osi_layer == 6
+    assert open_ports[22].osi_layer == 7
+    # conformité + suggestions présentes sur ssh/ftp
+    assert any(c.framework == "ANSSI" for c in open_ports[22].compliance)
+    assert any("hydra" in s for s in open_ports[21].suggestions)
 
 
 def test_scan_valid_target():

@@ -43,7 +43,8 @@ export interface Beacon { process: string; remote: string; period_s: number; cou
 export interface LanDevice { ip: string; mac: string; vendor: string; }
 export interface FwResult { ok: boolean; dry_run?: boolean; command?: string; output?: string; error?: string; }
 export interface ScanCve { cve: string; cvss: number; severity: string; summary: string; url: string; }
-export interface ScanPort { port: number; protocol: string; state: string; service: string; product: string; version: string; cves: ScanCve[]; }
+export interface Compliance { framework: string; control: string; note: string; }
+export interface ScanPort { port: number; protocol: string; state: string; service: string; product: string; version: string; cves: ScanCve[]; osi_layer: number; osi_label: string; compliance: Compliance[]; suggestions: string[]; }
 export interface ScanHost { ip: string; hostname: string; os: string; ports: ScanPort[]; }
 export interface ScanResult { target: string; mode: string; hosts: ScanHost[]; running: boolean; error: string | null; nmap_available: boolean; }
 export interface Snapshot { id: number; taken_at: string; exposure_score: number; band: string; total: number; safe: number; watch: number; suspect: number; crit: number; }
