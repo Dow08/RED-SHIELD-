@@ -14,9 +14,12 @@ from app import __version__
 from app.config import settings
 from app.core.bus import EventBus
 from app.core.registry import Registry
+from app.modules.analytics import AnalyticsModule
 from app.modules.base import ModuleStatus
 from app.modules.bandwidth import BandwidthModule
 from app.modules.cracker import CrackerModule, CrackRequest
+from app.modules.firewall import FirewallModule, FwRequest
+from app.modules.lan import LanModule
 from app.modules.diagnostic import DiagnosticModule
 from app.modules.persistence import PersistenceModule
 from app.modules.scoring import ScoringModule
@@ -34,13 +37,18 @@ def register_modules(registry: Registry, bus: EventBus) -> None:
     Diagnostic en premier : il s'abonne au bus avant les autres pour capter leurs logs.
     """
     registry.register(DiagnosticModule(bus))
-    registry.register(ShieldModule(bus))
+    shield = ShieldModule(bus)
+    registry.register(shield)
     registry.register(BandwidthModule(bus))
-    registry.register(ScoringModule(bus))
+    scoring = ScoringModule(bus)
+    registry.register(scoring)
     registry.register(PersistenceModule(bus))
     registry.register(TraceModule(bus))
     registry.register(WifiModule(bus))
     registry.register(CrackerModule(bus))
+    registry.register(FirewallModule(bus))
+    registry.register(LanModule(bus))
+    registry.register(AnalyticsModule(bus, shield, scoring))
 
 
 def create_app() -> FastAPI:
@@ -148,6 +156,40 @@ def create_app() -> FastAPI:
     @app.post("/crack")
     def crack(req: CrackRequest):
         return _require("cracker").crack(req)
+
+    @app.get("/analytics/timeline")
+    def analytics_timeline(limit: int = 100):
+        return _require("analytics").timeline(limit=limit)
+
+    @app.get("/analytics/beaconing")
+    def analytics_beaconing():
+        return _require("analytics").beaconing()
+
+    @app.get("/lan/devices")
+    def lan_devices():
+        module = registry.get("lan")
+        return module.devices() if module is not None else []
+
+    @app.post("/firewall/block")
+    def firewall_block(req: FwRequest):
+        result = _require("firewall").block(req.ip, dry_run=req.dry_run)
+        persist = registry.get("persistence")
+        if persist is not None and persist.health() == ModuleStatus.ACTIVE and not req.dry_run:
+            persist.add_audit("firewall_block", req.ip)
+        return result
+
+    @app.post("/firewall/unblock")
+    def firewall_unblock(req: FwRequest):
+        result = _require("firewall").unblock(req.ip)
+        persist = registry.get("persistence")
+        if persist is not None and persist.health() == ModuleStatus.ACTIVE:
+            persist.add_audit("firewall_unblock", req.ip)
+        return result
+
+    @app.get("/firewall/rules")
+    def firewall_rules():
+        module = registry.get("firewall")
+        return module.list_rules() if module is not None else []
 
     @app.get("/report/markdown", response_class=PlainTextResponse)
     def report_markdown():

@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
-import type { CrackResult, ScoredConnection, Severity, TraceResult, WifiNet } from "./api";
+import type { Beacon, CrackResult, LanDevice, ScoredConnection, Severity, TimelineEvent, TraceResult, WifiNet } from "./api";
 import { usePolling } from "./hooks";
 import { BandwidthChart, NetworkGraph, Sparkline, TraceMap } from "./viz";
 
@@ -27,6 +27,44 @@ function Card({ title, right, children, className }: { title: string; right?: Re
       </div>
       {children}
     </div>
+  );
+}
+
+function CutButton({ ip }: { ip: string }) {
+  const [stage, setStage] = useState<"idle" | "confirm" | "done">("idle");
+  const [msg, setMsg] = useState("");
+  const dry = async () => { try { const r = await api.firewallBlock(ip, true); setMsg(r.command || ""); setStage("confirm"); } catch { setMsg("moteur injoignable"); } };
+  const apply = async () => { try { const r = await api.firewallBlock(ip, false); setMsg(r.ok ? "Connexion bloquée ✅" : (r.error || "échec")); setStage("done"); } catch { setMsg("échec"); } };
+  const undo = async () => { try { await api.firewallUnblock(ip); setMsg("Débloqué"); setStage("idle"); } catch { setMsg("échec"); } };
+  if (stage === "idle") return <button className="btn ghost" onClick={dry}>Couper (dry-run)</button>;
+  if (stage === "confirm") return (
+    <span style={{ display: "inline-flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+      <span className="mono" style={{ fontSize: 10, color: "var(--faint)" }}>{msg}</span>
+      <button className="btn" onClick={apply}>Confirmer le blocage</button>
+      <button className="btn ghost" onClick={() => setStage("idle")}>Annuler</button>
+    </span>
+  );
+  return <span style={{ display: "inline-flex", gap: 8, alignItems: "center" }}><span style={{ color: "var(--safe)", fontSize: 12 }}>{msg}</span><button className="btn ghost" onClick={undo}>Débloquer (undo)</button></span>;
+}
+
+function Reorderable({ ids, render, storageKey }: { ids: string[]; render: (id: string) => React.ReactNode; storageKey: string }) {
+  const [order, setOrder] = useState<string[]>(() => {
+    try { const saved = JSON.parse(localStorage.getItem(storageKey) || "[]"); if (Array.isArray(saved) && saved.length) return [...saved.filter((s: string) => ids.includes(s)), ...ids.filter((i) => !saved.includes(i))]; } catch { /* noop */ }
+    return ids;
+  });
+  const drag = useRef<string | null>(null);
+  const move = (from: string, to: string) => {
+    if (from === to) return;
+    setOrder((o) => { const a = [...o]; const fi = a.indexOf(from), ti = a.indexOf(to); a.splice(fi, 1); a.splice(ti, 0, from); localStorage.setItem(storageKey, JSON.stringify(a)); return a; });
+  };
+  return (
+    <>
+      {order.map((id) => (
+        <div key={id} draggable onDragStart={() => (drag.current = id)} onDragOver={(e) => e.preventDefault()} onDrop={() => drag.current && move(drag.current, id)} style={{ cursor: "grab" }}>
+          {render(id)}
+        </div>
+      ))}
+    </>
   );
 }
 
@@ -67,7 +105,7 @@ function ConnRow({ c, showCols }: { c: ScoredConnection; showCols: Record<string
 }
 
 /* ============ DASHBOARD ============ */
-function Dashboard({ conns, exposure, modules, logs, bwHist, scoreHist, top, trace, onGo, onSelect }: any) {
+function Dashboard({ conns, exposure, modules, logs, bwHist, scoreHist, top, trace, beaconing, onGo, onSelect }: any) {
   const risky = (conns as ScoredConnection[]).filter((c) => c.severity === "suspect" || c.severity === "crit").sort((a, b) => b.risk - a.risk);
   const topConns = [...(conns as ScoredConnection[])].sort((a, b) => b.risk - a.risk).slice(0, 4);
   const [sub, setSub] = useState<"debit" | "top">("debit");
@@ -142,47 +180,65 @@ function Dashboard({ conns, exposure, modules, logs, bwHist, scoreHist, top, tra
       </div>
 
       <div className="col">
-        <Card title="Tracé de connexion" right={<a onClick={() => onGo("carte")}>carte →</a>}>
-          {trace && (trace.public_ip || trace.hops?.length) ? (
-            <>
-              <div className="recap"><span className="ic">🌍</span>IP publique<span className="v mono">{trace.public_ip || "—"}</span></div>
-              <div className="recap"><span className="ic">🔒</span>VPN<span className="v" style={{ color: trace.vpn_active ? "var(--safe)" : "var(--faint)" }}>{trace.vpn_active ? (trace.vpn_adapter || "actif") : "inactif"}</span></div>
-              <div className="recap"><span className="ic">🛰️</span>Sauts<span className="v">{trace.hops.length}</span></div>
-              <div className="disc">{trace.hops.filter((h: any) => h.city || h.country).map((h: any) => h.city || h.country).slice(0, 5).join(" → ") || "chemin en cours de géolocalisation"}</div>
-            </>
-          ) : <div className="empty">{trace?.running ? "Traceroute en cours…" : "Ouvre l'onglet Carte réseau pour lancer un tracé"}</div>}
-        </Card>
-        <Card title="Vue d'ensemble">
-          <div className="recap"><span className="ic">🛰️</span>Connexions actives<span className="v">{conns.length}</span></div>
-          <div className="recap"><span className="ic">🚨</span>Alertes critiques<span className="v" style={{ color: "var(--crit)" }}>{counts.crit}</span></div>
-          <div className="recap"><span className="ic">⚠️</span>Suspectes<span className="v" style={{ color: "var(--crit)" }}>{counts.suspect}</span></div>
-          <div className="recap"><span className="ic">🌐</span>Endpoints distincts<span className="v">{new Set((conns as ScoredConnection[]).map((c) => c.remote_addr)).size}</span></div>
-          <div className="recap"><span className="ic">💾</span>Budget journal<span className="v">≤ 1 Go</span></div>
-        </Card>
-        <Card title="Modules" right={String(modules.length)}>
-          {modules.map((m: any) => (
-            <div className="mod" key={m.name}>
-              <span className={`st2 ${m.status === "active" ? "on" : m.status === "error" ? "err" : "off"}`}></span>
-              {m.description || m.name}
-              <span className={`stl ${m.status === "active" ? "on" : m.status === "error" ? "err" : "off"}`}>{m.status}</span>
-            </div>
-          ))}
-        </Card>
-        <Card title="Top remédiations" right={<a onClick={() => onGo("remediation")}>tout voir →</a>}>
-          {risky.slice(0, 3).map((c, i) => (
-            <div className="rcard" key={i}>
-              <div className="rhead"><span className={`pr ${c.severity === "crit" ? "c" : "w"}`}>{c.severity === "crit" ? "CRITIQUE" : "HAUTE"}</span><span className="rtitle" style={{ fontSize: 12.5 }}>{c.process} → {c.remote_addr}:{c.port}</span></div>
-              {c.mitre[0] && <div className="rmeta"><span className="badge m">{c.mitre[0].id}</span></div>}
-            </div>
-          ))}
-          {risky.length === 0 && <div className="empty">Aucune connexion suspecte. Machine saine ✅</div>}
-        </Card>
-        <Card title="Journal récent" right={<a onClick={() => onGo("diagnostic")}>ouvrir →</a>}>
-          {logs.slice(-4).reverse().map((l: any, i: number) => (
-            <div className="log" key={i}><span className="ts">{l.ts.slice(11, 16)}</span><span className={`lv ${l.level}`}>{l.level.slice(0, 4).toUpperCase()}</span><span className="ms">{l.message}</span></div>
-          ))}
-          {logs.length === 0 && <div className="empty">Journal vide</div>}
-        </Card>
+        <div className="disc" style={{ padding: "0 2px 2px" }}>↕ Glisse les cartes pour réorganiser ton tableau de bord.</div>
+        <Reorderable
+          storageKey="red-dash-side"
+          ids={["trace", "vue", "modules", "remed", "journal"]}
+          render={(id) => ({
+            trace: (
+              <Card title="Tracé de connexion" right={<a onClick={() => onGo("carte")}>carte →</a>}>
+                {trace && (trace.public_ip || trace.hops?.length) ? (
+                  <>
+                    <div className="recap"><span className="ic">🌍</span>IP publique<span className="v mono">{trace.public_ip || "—"}</span></div>
+                    <div className="recap"><span className="ic">🔒</span>VPN<span className="v" style={{ color: trace.vpn_active ? "var(--safe)" : "var(--faint)" }}>{trace.vpn_active ? (trace.vpn_adapter || "actif") : "inactif"}</span></div>
+                    <div className="recap"><span className="ic">🛰️</span>Sauts<span className="v">{trace.hops.length}</span></div>
+                    <div className="disc">{trace.hops.filter((h: any) => h.city || h.country).map((h: any) => h.city || h.country).slice(0, 5).join(" → ") || "chemin en cours de géolocalisation"}</div>
+                  </>
+                ) : <div className="empty">{trace?.running ? "Traceroute en cours…" : "Ouvre l'onglet Carte réseau pour lancer un tracé"}</div>}
+              </Card>
+            ),
+            vue: (
+              <Card title="Vue d'ensemble">
+                <div className="recap"><span className="ic">🛰️</span>Connexions actives<span className="v">{conns.length}</span></div>
+                <div className="recap"><span className="ic">🚨</span>Alertes critiques<span className="v" style={{ color: "var(--crit)" }}>{counts.crit}</span></div>
+                <div className="recap"><span className="ic">⚠️</span>Suspectes<span className="v" style={{ color: "var(--crit)" }}>{counts.suspect}</span></div>
+                <div className="recap"><span className="ic">📡</span>Beaconing C2<span className="v" style={{ color: beaconing?.length ? "var(--crit)" : "var(--faint)" }}>{beaconing?.length || 0}</span></div>
+                <div className="recap"><span className="ic">🌐</span>Endpoints distincts<span className="v">{new Set((conns as ScoredConnection[]).map((c) => c.remote_addr)).size}</span></div>
+                <div className="recap"><span className="ic">💾</span>Budget journal<span className="v">≤ 1 Go</span></div>
+              </Card>
+            ),
+            modules: (
+              <Card title="Modules" right={String(modules.length)}>
+                {modules.map((m: any) => (
+                  <div className="mod" key={m.name}>
+                    <span className={`st2 ${m.status === "active" ? "on" : m.status === "error" ? "err" : "off"}`}></span>
+                    {m.description || m.name}
+                    <span className={`stl ${m.status === "active" ? "on" : m.status === "error" ? "err" : "off"}`}>{m.status}</span>
+                  </div>
+                ))}
+              </Card>
+            ),
+            remed: (
+              <Card title="Top remédiations" right={<a onClick={() => onGo("remediation")}>tout voir →</a>}>
+                {risky.slice(0, 3).map((c, i) => (
+                  <div className="rcard" key={i}>
+                    <div className="rhead"><span className={`pr ${c.severity === "crit" ? "c" : "w"}`}>{c.severity === "crit" ? "CRITIQUE" : "HAUTE"}</span><span className="rtitle" style={{ fontSize: 12.5 }}>{c.process} → {c.remote_addr}:{c.port}</span></div>
+                    {c.mitre[0] && <div className="rmeta"><span className="badge m">{c.mitre[0].id}</span></div>}
+                  </div>
+                ))}
+                {risky.length === 0 && <div className="empty">Aucune connexion suspecte. Machine saine ✅</div>}
+              </Card>
+            ),
+            journal: (
+              <Card title="Journal récent" right={<a onClick={() => onGo("diagnostic")}>ouvrir →</a>}>
+                {logs.slice(-4).reverse().map((l: any, i: number) => (
+                  <div className="log" key={i}><span className="ts">{l.ts.slice(11, 16)}</span><span className={`lv ${l.level}`}>{l.level.slice(0, 4).toUpperCase()}</span><span className="ms">{l.message}</span></div>
+                ))}
+                {logs.length === 0 && <div className="empty">Journal vide</div>}
+              </Card>
+            ),
+          }[id])}
+        />
       </div>
     </div>
   );
@@ -324,6 +380,7 @@ function Remediation({ conns }: { conns: ScoredConnection[] }) {
             <div className="rmeta">{c.mitre.map((t) => <a key={t.id} className="badge m" href={t.url} target="_blank" rel="noopener">{t.id} — {t.name} ↗</a>)}</div>
           )}
           <div className="rbody"><b>Remédiation :</b> investiguer le process et sa légitimité, vérifier la persistance, couper la connexion si non autorisée.</div>
+          <div className="actions" style={{ border: "none", padding: "8px 0 0" }}><CutButton ip={c.remote_addr} /></div>
         </div>
       ))}
     </Card>
@@ -331,8 +388,9 @@ function Remediation({ conns }: { conns: ScoredConnection[] }) {
 }
 
 /* ============ RECON ============ */
-function Recon({ wifi }: { wifi: { networks: WifiNet[]; message: string } | null }) {
+function Recon({ wifi, lan }: { wifi: { networks: WifiNet[]; message: string } | null; lan: LanDevice[] | null }) {
   const nets = wifi?.networks || [];
+  const devices = lan || [];
   const rc = (r: string) => (r === "crit" ? "var(--crit)" : r === "watch" ? "var(--watch)" : "var(--safe)");
   return (
     <div className="grid">
@@ -348,8 +406,16 @@ function Recon({ wifi }: { wifi: { networks: WifiNet[]; message: string } | null
             </div>
           ))}
         </Card>
-        <Card title="Découverte LAN" right="Jalon 2">
-          <div className="note">Le balayage du réseau local (appareils, IP/MAC/fabricant, alertes) arrive au <b>Jalon 2</b>.</div>
+        <Card title="Découverte LAN" right={`${devices.length} appareils`}>
+          <div className="note">Voisins du réseau local (table ARP, passif). Un appareil au <b>fabricant inconnu</b> mérite vérification.</div>
+          {devices.map((d) => (
+            <div className="row" key={d.mac}>
+              <span className="nm mono">{d.ip}</span>
+              <span className="ds mono">{d.mac}</span>
+              <span className="stt" style={{ marginLeft: "auto", color: d.vendor ? "var(--safe)" : "var(--watch)", borderColor: d.vendor ? "var(--card-b)" : "var(--watch)" }}>{d.vendor || "fabricant inconnu"}</span>
+            </div>
+          ))}
+          {devices.length === 0 && <div className="empty">Aucun voisin dans le cache ARP (ping le réseau pour le peupler).</div>}
         </Card>
       </div>
       <div className="col">
@@ -444,7 +510,8 @@ function Connecteurs({ airgapped }: { airgapped: boolean }) {
 }
 
 /* ============ DIAGNOSTIC ============ */
-function Diagnostic({ logs, history }: { logs: any[]; history: any[] }) {
+const KIND_ICON: Record<string, string> = { nouvelle_connexion: "➕", connexion_fermee: "➖", alerte: "🚨" };
+function Diagnostic({ logs, history, timeline, beaconing }: { logs: any[]; history: any[]; timeline: TimelineEvent[]; beaconing: Beacon[] }) {
   const [level, setLevel] = useState("");
   const shown = level ? logs.filter((l) => l.level === level) : logs;
   return (
@@ -462,8 +529,29 @@ function Diagnostic({ logs, history }: { logs: any[]; history: any[] }) {
           ))}
           {shown.length === 0 && <div className="empty">Aucun log</div>}
         </Card>
+        <Card title="Timeline des événements" right={`${(timeline || []).length}`}>
+          {(timeline || []).slice(0, 40).map((e, i) => (
+            <div className="log" key={i}>
+              <span className="ts">{e.ts.slice(11, 19)}</span>
+              <span className={`lv ${e.severity === "crit" || e.severity === "suspect" ? "error" : e.severity === "watch" ? "warn" : "info"}`}>{KIND_ICON[e.kind] || "•"}</span>
+              <span className="ms">{e.process} → {e.remote} <span className="muted">({e.kind.replace("_", " ")})</span></span>
+            </div>
+          ))}
+          {(!timeline || timeline.length === 0) && <div className="empty">Aucun événement encore (échantillonnage en cours).</div>}
+        </Card>
       </div>
       <div className="col">
+        <Card title="Beaconing C2 détecté" right={`${(beaconing || []).length}`}>
+          <div className="note">Connexions réapparaissant à intervalle régulier (motif de Command &amp; Control).</div>
+          {(beaconing || []).map((b, i) => (
+            <div className="row" key={i}>
+              <span className="nm">{b.process}</span>
+              <span className="ds mono">{b.remote} · ~{b.period_s}s · régularité {Math.round(b.regularity * 100)}%</span>
+              <span className="stt" style={{ marginLeft: "auto", color: "var(--crit)", borderColor: "var(--crit)" }}>beacon</span>
+            </div>
+          ))}
+          {(!beaconing || beaconing.length === 0) && <div className="empty">Aucun beaconing détecté ✅</div>}
+        </Card>
         <Card title="Historique (snapshots)" right={String(history.length)}>
           {history.slice(0, 12).map((s) => (
             <div className="recap" key={s.id}><span className="mono" style={{ color: "var(--faint)" }}>{s.taken_at.slice(0, 16).replace("T", " ")}</span><span className="v" style={{ color: bandColor(s.band) }}>{s.exposure_score}/100</span></div>
@@ -505,6 +593,9 @@ export default function App() {
   const [traceTarget, setTraceTarget] = useState("1.1.1.1");
   const trace = usePolling(() => api.trace(traceTarget), 6000);
   const wifi = usePolling(api.wifi, 15000);
+  const timeline = usePolling(api.timeline, 6000);
+  const beaconing = usePolling(api.beaconing, 10000);
+  const lan = usePolling(api.lan, 20000);
   const runTrace = (t: string) => { setTraceTarget(t); api.traceRun(t); };
   const selectEndpoint = (ip: string) => { runTrace(ip); setTab("carte"); };
 
@@ -541,14 +632,14 @@ export default function App() {
         ))}
       </div>
 
-      {tab === "dashboard" && <Dashboard conns={conns} exposure={exposure.data} modules={mods} logs={logs.data || []} bwHist={bwHist} scoreHist={scoreHist} top={top.data || []} trace={trace.data} onGo={setTab} onSelect={selectEndpoint} />}
+      {tab === "dashboard" && <Dashboard conns={conns} exposure={exposure.data} modules={mods} logs={logs.data || []} bwHist={bwHist} scoreHist={scoreHist} top={top.data || []} trace={trace.data} beaconing={beaconing.data || []} onGo={setTab} onSelect={selectEndpoint} />}
       {tab === "bouclier" && <Bouclier conns={conns} />}
       {tab === "carte" && <CarteReseau conns={conns} trace={trace.data} onRun={runTrace} onSelect={selectEndpoint} />}
       {tab === "remediation" && <Remediation conns={conns} />}
-      {tab === "recon" && <Recon wifi={wifi.data} />}
+      {tab === "recon" && <Recon wifi={wifi.data} lan={lan.data} />}
       {tab === "offensif" && <Offensif />}
       {tab === "connecteurs" && <Connecteurs airgapped={airgapped} />}
-      {tab === "diagnostic" && <Diagnostic logs={logs.data || []} history={history.data || []} />}
+      {tab === "diagnostic" && <Diagnostic logs={logs.data || []} history={history.data || []} timeline={timeline.data || []} beaconing={beaconing.data || []} />}
 
       <div className="foot">RED Shield · Jalon 1 · style mix moderne · données réelles (aucune inventée)</div>
     </div>
