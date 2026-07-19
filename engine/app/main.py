@@ -20,6 +20,8 @@ from app.modules.diagnostic import DiagnosticModule
 from app.modules.persistence import PersistenceModule
 from app.modules.scoring import ScoringModule
 from app.modules.shield import ShieldModule
+from app.modules.trace import TraceModule
+from app.modules.wifi import WifiModule
 from app.report.markdown import build_markdown
 
 logging.basicConfig(level=logging.INFO)
@@ -35,6 +37,8 @@ def register_modules(registry: Registry, bus: EventBus) -> None:
     registry.register(BandwidthModule(bus))
     registry.register(ScoringModule(bus))
     registry.register(PersistenceModule(bus))
+    registry.register(TraceModule(bus))
+    registry.register(WifiModule(bus))
 
 
 def create_app() -> FastAPI:
@@ -121,6 +125,23 @@ def create_app() -> FastAPI:
     @app.get("/history")
     def history(limit: int = 100):
         return _require("persistence").history(limit=limit)
+
+    @app.get("/trace")
+    def trace(target: str | None = None):
+        return _require("trace").get(target)
+
+    @app.post("/trace/run")
+    def trace_run(target: str | None = None):
+        module = _require("trace")
+        module.run_async(target or module.default_target)
+        return {"running": True, "target": target or module.default_target}
+
+    @app.get("/wifi/networks")
+    def wifi_networks():
+        module = registry.get("wifi")
+        if module is None or module.health() != ModuleStatus.ACTIVE:
+            return []
+        return module.get_networks()
 
     @app.get("/report/markdown", response_class=PlainTextResponse)
     def report_markdown():
