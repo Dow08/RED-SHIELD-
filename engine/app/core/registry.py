@@ -20,6 +20,10 @@ class Registry:
     def start_all(self) -> None:
         for module in self._modules.values():
             supervise(module, module.start, self.bus, "start")
+            if module.health().value == "active":
+                self.bus.publish(
+                    "log", {"level": "info", "module": module.name, "message": "module démarré"}
+                )
 
     def stop_all(self) -> None:
         for module in self._modules.values():

@@ -8,6 +8,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import PlainTextResponse
 
 from app import __version__
 from app.config import settings
@@ -15,17 +16,25 @@ from app.core.bus import EventBus
 from app.core.registry import Registry
 from app.modules.base import ModuleStatus
 from app.modules.bandwidth import BandwidthModule
+from app.modules.diagnostic import DiagnosticModule
+from app.modules.persistence import PersistenceModule
 from app.modules.scoring import ScoringModule
 from app.modules.shield import ShieldModule
+from app.report.markdown import build_markdown
 
 logging.basicConfig(level=logging.INFO)
 
 
 def register_modules(registry: Registry, bus: EventBus) -> None:
-    """Enregistre les modules concrets (rempli au fil des étapes du Jalon 1)."""
+    """Enregistre les modules concrets (rempli au fil des étapes du Jalon 1).
+
+    Diagnostic en premier : il s'abonne au bus avant les autres pour capter leurs logs.
+    """
+    registry.register(DiagnosticModule(bus))
     registry.register(ShieldModule(bus))
     registry.register(BandwidthModule(bus))
     registry.register(ScoringModule(bus))
+    registry.register(PersistenceModule(bus))
 
 
 def create_app() -> FastAPI:
@@ -42,6 +51,11 @@ def create_app() -> FastAPI:
     app = FastAPI(title="RED — Network Shield & Recon", version=__version__, lifespan=lifespan)
     app.state.bus = bus
     app.state.registry = registry
+
+    # Un abonné défaillant est journalisé sans republier sur le bus (évite toute récursion).
+    bus.set_error_handler(
+        lambda topic, exc: logging.getLogger("red").error("bus[%s]: %s", topic, exc)
+    )
 
     @app.get("/health")
     def health() -> dict:
@@ -83,6 +97,43 @@ def create_app() -> FastAPI:
         conns = _require("shield").get_connections()
         scoring = _require("scoring")
         return scoring.exposure_summary(scoring.score_connections(conns))
+
+    @app.get("/diagnostic/logs")
+    def diagnostic_logs(since: str | None = None, until: str | None = None, level: str | None = None):
+        return _require("diagnostic").get_logs(since=since, until=until, level=level)
+
+    @app.get("/diagnostic/logs/export", response_class=PlainTextResponse)
+    def diagnostic_export():
+        text = _require("diagnostic").export_text()
+        return PlainTextResponse(
+            text, headers={"Content-Disposition": "attachment; filename=red-logs.txt"}
+        )
+
+    @app.post("/snapshot")
+    def snapshot():
+        scoring = _require("scoring")
+        persist = _require("persistence")
+        summary = scoring.exposure_summary(scoring.score_connections(_require("shield").get_connections()))
+        snap = persist.record_snapshot(summary)
+        persist.add_audit("snapshot", f"score={summary.score}")
+        return snap
+
+    @app.get("/history")
+    def history(limit: int = 100):
+        return _require("persistence").history(limit=limit)
+
+    @app.get("/report/markdown", response_class=PlainTextResponse)
+    def report_markdown():
+        scoring = _require("scoring")
+        scored = scoring.score_connections(_require("shield").get_connections())
+        summary = scoring.exposure_summary(scored)
+        persist = registry.get("persistence")
+        if persist is not None and persist.health() == ModuleStatus.ACTIVE:
+            persist.add_audit("report", "markdown")
+        return PlainTextResponse(
+            build_markdown(summary, scored),
+            headers={"Content-Disposition": "attachment; filename=red-report.md"},
+        )
 
     return app
 
