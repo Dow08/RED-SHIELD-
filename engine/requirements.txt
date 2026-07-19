@@ -6,6 +6,7 @@ sqlmodel
 psutil
 keyring
 python-dotenv
+maxminddb
 
 # Dev / tests
 pytest
