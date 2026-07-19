@@ -108,3 +108,16 @@ class WifiModule(Module):
         if self.health() != ModuleStatus.ACTIVE:
             return []
         return self.parse_networks(self._netsh(["show", "networks", "mode=bssid"]))
+
+    def result(self) -> dict:
+        """Réseaux + message d'état (ex. service WiFi arrêté), pour l'UI."""
+        if self.health() != ModuleStatus.ACTIVE:
+            return {"networks": [], "message": "Audit WiFi disponible sous Windows uniquement."}
+        raw = self._netsh(["show", "networks", "mode=bssid"])
+        low = raw.lower()
+        if "wlansvc" in low or "n’est pas en cours" in low or "is not running" in low:
+            return {"networks": [], "message": "Service WiFi (wlansvc) non démarré — active le Wi-Fi ou démarre le service pour lancer l'audit."}
+        if "powered down" in low or "interface" in low and "there are 0" in low:
+            return {"networks": [], "message": "Aucun réseau détecté (adaptateur Wi-Fi éteint ?)."}
+        nets = self.parse_networks(raw)
+        return {"networks": [n.model_dump() for n in nets], "message": "" if nets else "Aucun réseau Wi-Fi à portée."}

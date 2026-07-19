@@ -139,9 +139,9 @@ def create_app() -> FastAPI:
     @app.get("/wifi/networks")
     def wifi_networks():
         module = registry.get("wifi")
-        if module is None or module.health() != ModuleStatus.ACTIVE:
-            return []
-        return module.get_networks()
+        if module is None:
+            return {"networks": [], "message": "module WiFi indisponible"}
+        return module.result()
 
     @app.get("/report/markdown", response_class=PlainTextResponse)
     def report_markdown():
