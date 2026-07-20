@@ -163,7 +163,7 @@ function PortChips({ ports }: { ports: import("./api").PortCount[] }) {
   if (!ports || ports.length === 0) return <span className="muted" style={{ fontSize: 11 }}>aucun</span>;
   return <>{ports.map((p) => <span key={p.port} className="pchip"><b style={{ color: p.encrypted ? "var(--safe)" : "var(--watch)" }}>{p.port}</b>{p.service ? " " + p.service : ""} <i>{p.count}</i></span>)}</>;
 }
-function Dashboard({ conns, exposure, metrics, modules, logs, bwHist, scoreHist, top, thrStatus, thrProcs, trace, beaconing, sevFilter, onGo, onSelect }: any) {
+function Dashboard({ conns, exposure, metrics, modules, logs, bwHist, bw, scoreHist, top, thrStatus, thrProcs, trace, beaconing, sevFilter, onGo, onSelect }: any) {
   const m = metrics as import("./api").NetMetrics | undefined;
   const thr = thrStatus as import("./api").ThroughputStatus | undefined;
   const procs = (thrProcs || []) as import("./api").ProcThroughput[];
@@ -202,7 +202,21 @@ function Dashboard({ conns, exposure, metrics, modules, logs, bwHist, scoreHist,
               <button className={`subtab ${sub === "top" ? "on" : ""}`} onClick={() => setSub("top")}>Top process</button>
             </div>
             {sub === "debit" ? (
-              <div className="stage"><BandwidthChart history={bwHist} /></div>
+              <>
+                <div className="stage"><BandwidthChart history={bwHist} /></div>
+                {(bw?.nics?.length ?? 0) > 0 && (
+                  <div className="niclist">
+                    {bw.nics.map((n: any) => (
+                      <div className="nicrow" key={n.name}>
+                        <span className="nn">{n.name}{n.is_tunnel && <span className="tun">VPN/tunnel</span>}</span>
+                        <span className="nv"><span className="dl">{fr(n.down_mo_s)}↓</span> <span className="ul">{fr(n.up_mo_s)}↑</span> <span style={{ color: "var(--faint)" }}>Mo/s</span></span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {bw?.note && <div className="disc" style={{ color: "var(--watch)" }}>⚠️ {bw.note}</div>}
+                {!bw?.note && <div className="disc">Débit total de la carte réseau (toutes interfaces) en temps réel.</div>}
+              </>
             ) : (
               <div className="bars">
                 {liveThr ? (
@@ -244,24 +258,32 @@ function Dashboard({ conns, exposure, metrics, modules, logs, bwHist, scoreHist,
               <div className="mval"><b style={{ color: "var(--safe)" }}>{m?.encrypted ?? 0}</b> <span className="sep">/</span> <b style={{ color: (m?.clear ?? 0) > 0 ? "var(--watch)" : "var(--soft)" }}>{m?.clear ?? 0}</b></div>
               <DualBar a={m?.encrypted ?? 0} b={m?.clear ?? 0} ca="var(--safe)" cb="var(--watch)" />
             </Mtile>
-            <Mtile label="TCP / UDP" hint="Clique pour voir les ports distants utilisés en TCP et en UDP." detail={
+            <Mtile label="TCP / UDP" hint="TCP = connexions établies (avec destinataire). UDP = sockets actifs : l'OS ne fournit pas le destinataire des flux UDP (sans connexion, ex. QUIC/vidéo) — l'attribution réelle nécessite la capture pktmon (admin)." detail={
               <>
                 <div className="mdrow"><span className="mdk">TCP</span><div className="pchips"><PortChips ports={m?.tcp_ports ?? []} /></div></div>
-                <div className="mdrow"><span className="mdk">UDP</span><div className="pchips"><PortChips ports={m?.udp_ports ?? []} /></div></div>
+                <div className="mdrow"><span className="mdk">UDP</span><div style={{ fontSize: 11, color: "var(--soft)" }}><b style={{ color: "var(--accent)" }}>{m?.udp_sockets ?? 0}</b> socket(s) UDP actif(s). Le destinataire n'est pas exposé par l'OS (sans connexion) → flux réel via la <b>capture pktmon</b> (admin).</div></div>
               </>
             }>
-              <div className="mval"><b>{m?.tcp ?? 0}</b> <span className="sep">/</span> <b>{m?.udp ?? 0}</b></div>
-              <DualBar a={m?.tcp ?? 0} b={m?.udp ?? 0} ca="var(--accent2)" cb="var(--accent)" />
+              <div className="mval"><b>{m?.tcp ?? 0}</b> <span className="sep">/</span> <b style={{ color: (m?.udp_sockets ?? 0) > 0 ? "var(--accent)" : "var(--faint)" }}>{m?.udp_sockets ?? 0}</b> <span style={{ fontSize: 10, fontWeight: 400, color: "var(--faint)" }}>UDP</span></div>
+              <DualBar a={m?.tcp ?? 0} b={m?.udp_sockets ?? 0} ca="var(--accent2)" cb="var(--accent)" />
             </Mtile>
             <Mtile label="Ports en écoute (exposés)">
               <div className="mval"><b style={{ color: (m?.listeners_exposed ?? 0) > 0 ? "var(--watch)" : "var(--safe)" }}>{m?.listeners_exposed ?? 0}</b> <span className="sep">/</span> <b>{m?.listeners ?? 0}</b></div>
               <a style={{ fontSize: 11 }} onClick={() => onGo("carte")}>voir la surface entrante →</a>
             </Mtile>
-            <Mtile label="Pays distincts" hint="Nombre de pays différents où se trouvent les IP distantes de tes connexions (géolocalisation hors-ligne DB-IP). Utile pour repérer un trafic vers une zone inhabituelle." detail={
-              <div className="mlist">{(m?.countries || []).map((c: any) => <span key={c.key}>{c.key} <i>{c.count} conn.</i></span>)}{(!m?.countries?.length) && <span className="muted" style={{ fontStyle: "italic" }}>géoloc indisponible</span>}</div>
+            <Mtile label="Pays distincts" hint="Pays où se trouvent les IP distantes de tes connexions (géoloc hors-ligne DB-IP). Le nombre à droite = nb de connexions vers ce pays. Déplie pour voir quelles applications s'y connectent." detail={
+              <div className="cstats">
+                {(m?.countries || []).map((c: any) => (
+                  <div key={c.key} className="cstat">
+                    <div className="ch"><b>{c.key}</b> <i>{c.count} conn.</i></div>
+                    <div className="cprocs">{(c.processes || []).map((p: any) => <span key={p.key}>{p.key} <i>{p.count}</i></span>)}{(!c.processes?.length) && <span className="muted">process inconnu</span>}</div>
+                  </div>
+                ))}
+                {(!m?.countries?.length) && <span className="muted" style={{ fontStyle: "italic" }}>géoloc indisponible (base DB-IP ou air-gapped)</span>}
+              </div>
             }>
               <div className="mval"><b>{m?.countries?.length ?? 0}</b> <span style={{ fontSize: 11, fontWeight: 400, color: "var(--faint)" }}>pays</span></div>
-              <div className="mlist">{(m?.countries || []).slice(0, 3).map((c: any) => <span key={c.key}>{c.key} <i>{c.count}</i></span>)}{(!m?.countries?.length) && <span className="muted" style={{ fontStyle: "italic" }}>géo hors-ligne</span>}</div>
+              <div className="mlist">{(m?.countries || []).slice(0, 3).map((c: any) => <span key={c.key}>{c.key} <i>{c.count} conn.</i></span>)}{(!m?.countries?.length) && <span className="muted" style={{ fontStyle: "italic" }}>géo hors-ligne</span>}</div>
             </Mtile>
             <Mtile label="Top ports distants">
               <div className="mlist">{(m?.top_ports || []).slice(0, 4).map((p: any) => <span key={p.port}><b style={{ color: p.encrypted ? "var(--safe)" : "var(--watch)" }}>{p.port}</b>{p.service ? ` ${p.service}` : ""} <i>{p.count}</i></span>)}{(!m?.top_ports?.length) && <span className="muted">—</span>}</div>
@@ -1023,7 +1045,7 @@ export default function App() {
         ))}
       </div>
 
-      {tab === "dashboard" && <Dashboard conns={conns} exposure={exposure.data} metrics={metrics.data} modules={mods} logs={logs.data || []} bwHist={bwHist} scoreHist={scoreHist} top={top.data || []} thrStatus={thrStatus.data} thrProcs={thrProcs.data || []} trace={trace.data} beaconing={beaconing.data || []} sevFilter={sevFilter} onGo={setTab} onSelect={selectEndpoint} />}
+      {tab === "dashboard" && <Dashboard conns={conns} exposure={exposure.data} metrics={metrics.data} modules={mods} logs={logs.data || []} bwHist={bwHist} bw={bandwidth.data} scoreHist={scoreHist} top={top.data || []} thrStatus={thrStatus.data} thrProcs={thrProcs.data || []} trace={trace.data} beaconing={beaconing.data || []} sevFilter={sevFilter} onGo={setTab} onSelect={selectEndpoint} />}
       {tab === "bouclier" && <Bouclier conns={conns} active={sevFilter} setActive={setSevFilter} />}
       {tab === "carte" && <CarteReseau conns={conns} listeners={listeners.data || []} trace={trace.data} traceLabel={traceLabel} onRun={runTrace} onSelect={selectEndpoint} />}
       {tab === "remediation" && <Remediation conns={conns} />}

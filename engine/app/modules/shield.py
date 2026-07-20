@@ -63,18 +63,25 @@ class KeyCount(BaseModel):
     count: int
 
 
+class CountryStat(BaseModel):
+    key: str
+    count: int
+    processes: list[KeyCount] = []   # applications à l'origine des connexions vers ce pays
+
+
 class NetMetrics(BaseModel):
     total: int = 0
     inbound: int = 0
     outbound: int = 0
     tcp: int = 0
-    udp: int = 0
+    udp: int = 0            # UDP avec destinataire connu (rare : psutil est sans-connexion pour l'UDP)
+    udp_sockets: int = 0    # sockets UDP actifs (réel) — le flux/destinataire nécessite la capture pktmon
     encrypted: int = 0
     clear: int = 0
     endpoints: int = 0
     listeners: int = 0
     listeners_exposed: int = 0
-    countries: list[KeyCount] = []
+    countries: list[CountryStat] = []
     top_ports: list[PortCount] = []
     tcp_ports: list[PortCount] = []
     udp_ports: list[PortCount] = []
@@ -266,11 +273,16 @@ class ShieldModule(Module):
         raw = psutil.net_connections(kind="inet")
         listen_ports = self._listen_ports(raw)
         m = NetMetrics()
+        cache: dict[int, dict] = {}
         ports: Counter[int] = Counter()
         tcp_ports: Counter[int] = Counter()
         udp_ports: Counter[int] = Counter()
         countries: Counter[str] = Counter()
+        country_procs: dict[str, Counter] = {}
         endpoints: set[str] = set()
+        # Sockets UDP actifs (réels) : psutil ne fournit pas leur destinataire (sans-connexion),
+        # mais leur présence prouve qu'il y a du trafic UDP (QUIC/vidéo…) — flux exact via pktmon.
+        m.udp_sockets = sum(1 for c in raw if c.type == socket.SOCK_DGRAM and c.laddr and not _is_loopback(c.laddr.ip))
         for c in raw:
             if not c.raddr or _is_loopback(c.raddr.ip):
                 continue
@@ -297,12 +309,19 @@ class ShieldModule(Module):
                 except Exception:
                     g = None
                 if g and g.get("country"):
-                    countries[g["country"]] += 1
+                    country = g["country"]
+                    countries[country] += 1
+                    proc = self._proc_info(c.pid, cache)["name"] if c.pid else "?"
+                    country_procs.setdefault(country, Counter())[proc] += 1
         m.endpoints = len(endpoints)
         listeners = self.get_listeners()
         m.listeners = len(listeners)
         m.listeners_exposed = sum(1 for l in listeners if l.exposed)
-        m.countries = [KeyCount(key=k, count=n) for k, n in countries.most_common(6)]
+        m.countries = [
+            CountryStat(key=k, count=n,
+                        processes=[KeyCount(key=pk, count=pn) for pk, pn in country_procs.get(k, Counter()).most_common(5)])
+            for k, n in countries.most_common(6)
+        ]
         def _mk(counter: Counter, k: int = 6) -> list[PortCount]:
             return [
                 PortCount(port=p, count=n, service=_PORT_SERVICE.get(p, ""), encrypted=p in _ENCRYPTED_PORTS)

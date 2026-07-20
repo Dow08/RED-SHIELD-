@@ -82,6 +82,7 @@ def _fake_raw():
         _Conn(_Addr("192.168.1.10", 49500), _Addr("140.82.121.4", 443), "ESTABLISHED", _s.SOCK_STREAM),   # sortant chiffré
         _Conn(_Addr("192.168.1.10", 49600), _Addr("93.184.216.34", 80), "ESTABLISHED", _s.SOCK_STREAM),   # sortant clair
         _Conn(_Addr("127.0.0.1", 49700), _Addr("127.0.0.1", 9000), "ESTABLISHED", _s.SOCK_STREAM),        # loopback (ignoré)
+        _Conn(_Addr("0.0.0.0", 5353), None, "NONE", _s.SOCK_DGRAM),                                        # socket UDP (sans destinataire)
     ]
 
 
@@ -106,7 +107,10 @@ def test_direction_and_metrics_deterministic(monkeypatch):
     assert m.encrypted == 1 and m.clear == 2       # 443 chiffré ; 80 + 55000 clairs
     assert m.listeners == 2 and m.listeners_exposed == 1
     assert m.endpoints == 3
-    assert any(c.key == "US" and c.count == 3 for c in m.countries)
+    assert m.udp_sockets == 1                        # le socket UDP est compté même sans destinataire
+    us = next(c for c in m.countries if c.key == "US")
+    assert us.count == 3
+    assert sum(p.count for p in us.processes) == 3   # les process sont ventilés par pays
     top = {pc.port: pc for pc in m.top_ports}
     assert top[443].encrypted is True and top[443].service == "https"
     assert top[80].encrypted is False

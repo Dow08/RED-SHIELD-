@@ -27,11 +27,12 @@ export interface ScoredConnection {
 export interface Listener { pid: number | null; process: string; exe: string; addr: string; port: number; protocol: string; exposed: boolean; }
 export interface PortCount { port: number; count: number; service: string; encrypted: boolean; }
 export interface KeyCount { key: string; count: number; }
+export interface CountryStat { key: string; count: number; processes: KeyCount[]; }
 export interface NetMetrics {
-  total: number; inbound: number; outbound: number; tcp: number; udp: number;
+  total: number; inbound: number; outbound: number; tcp: number; udp: number; udp_sockets: number;
   encrypted: number; clear: number; endpoints: number;
   listeners: number; listeners_exposed: number;
-  countries: KeyCount[]; top_ports: PortCount[];
+  countries: CountryStat[]; top_ports: PortCount[];
   tcp_ports: PortCount[]; udp_ports: PortCount[];
 }
 
@@ -42,7 +43,8 @@ export interface Exposure {
   counts: Record<Severity, number>;
 }
 
-export interface Bandwidth { down_bps: number; up_bps: number; down_mo_s: number; up_mo_s: number; }
+export interface NicRate { name: string; down_mo_s: number; up_mo_s: number; is_tunnel: boolean; }
+export interface Bandwidth { down_bps: number; up_bps: number; down_mo_s: number; up_mo_s: number; nics: NicRate[]; note: string; }
 export interface ProcThroughput { pid: number; process: string; down_bps: number; up_bps: number; down_mo_s: number; up_mo_s: number; }
 export interface ThroughputStatus { available: boolean; admin: boolean; platform_ok: boolean; pktmon_present: boolean; capturing: boolean; reason: string; inbound_packets: number; packets_seen: number; }
 export interface ModuleInfo { name: string; version: string; description: string; status: string; message: string; }
