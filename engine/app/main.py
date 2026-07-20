@@ -27,6 +27,7 @@ from app.modules.llm import LlmModule
 from app.modules.osint import OsintModule
 from app.runtime import runtime
 from app.modules.firewall import FirewallModule, FwRequest, FwPortRequest
+from app.modules.health import HealthModule
 from app.modules.hids import HidsModule
 from app.modules.imapmail import ImapMailModule
 from app.modules.lan import LanModule
@@ -63,6 +64,10 @@ class LlmReq(BaseModel):
     kind: str = "rapport"
 
 
+class CleanReq(BaseModel):
+    dry_run: bool = True
+
+
 def register_modules(registry: Registry, bus: EventBus) -> None:
     """Enregistre les modules concrets (rempli au fil des étapes du Jalon 1).
 
@@ -81,6 +86,7 @@ def register_modules(registry: Registry, bus: EventBus) -> None:
     registry.register(CrackerModule(bus))
     registry.register(FirewallModule(bus))
     registry.register(LanModule(bus))
+    registry.register(HealthModule(bus))
     registry.register(ScanModule(bus))
     registry.register(ProcVulnModule(bus))
     registry.register(HidsModule(bus))
@@ -358,6 +364,27 @@ def create_app() -> FastAPI:
     @app.get("/analytics/beaconing")
     def analytics_beaconing():
         return _require("analytics").beaconing()
+
+    @app.get("/health/report")
+    def health_report():
+        module = registry.get("health")
+        return module.get() if module is not None else {"available": False}
+
+    @app.post("/health/run")
+    def health_run():
+        module = registry.get("health")
+        return module.run_async() if module is not None else {"ok": False}
+
+    @app.post("/health/clean")
+    def health_clean(req: CleanReq):
+        module = registry.get("health")
+        if module is None:
+            raise HTTPException(status_code=503, detail="module health indisponible")
+        result = module.clean_temp(dry_run=req.dry_run)
+        persist = registry.get("persistence")
+        if persist is not None and persist.health() == ModuleStatus.ACTIVE and not req.dry_run:
+            persist.add_audit("health_clean", f"{result.deleted_files} fichiers, {result.freed_mb} Mo")
+        return result
 
     @app.get("/lan/devices")
     def lan_devices():

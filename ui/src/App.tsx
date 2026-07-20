@@ -1086,6 +1086,74 @@ function Diagnostic({ logs, history, timeline, beaconing, config }: { logs: any[
   );
 }
 
+/* ============ SANTÉ (bilan poste, esprit CCleaner) ============ */
+function Health({ report }: { report: import("./api").HealthReport | null }) {
+  const [clean, setClean] = useState<import("./api").CleanResult | null>(null);
+  const [stage, setStage] = useState<"idle" | "confirm" | "done">("idle");
+  const [busy, setBusy] = useState(false);
+  const r = report;
+  useEffect(() => { api.healthRun().catch(() => {}); }, []);
+  const dc = (p: number) => (p >= 90 ? "var(--crit)" : p >= 75 ? "var(--watch)" : "var(--safe)");
+  const dry = async () => { setBusy(true); try { const res = await api.healthClean(true); setClean(res); setStage("confirm"); } catch { /* noop */ } setBusy(false); };
+  const apply = async () => { setBusy(true); try { const res = await api.healthClean(false); setClean(res); setStage("done"); await api.healthRun(); } catch { /* noop */ } setBusy(false); };
+  return (
+    <div className="grid">
+      <div className="col">
+        <Card title="Bilan de santé du poste" right={<button className="btn ghost" style={{ padding: "5px 10px" }} onClick={() => api.healthRun()}>Rafraîchir</button>}>
+          <div className="note">État réel de la machine (lecture seule) : espace disque, fichiers temporaires, programmes au démarrage, redémarrage en attente. Toutes les valeurs sont <b>mesurées</b>, rien d'inventé.</div>
+          {!r || r.running ? <div className="empty">{r?.running ? "Analyse du poste…" : "Chargement…"}</div> : (
+            <>
+              <div style={{ padding: "6px 16px" }}>
+                <div className="lbl" style={{ marginBottom: 8 }}>Recommandations</div>
+                {r.recommendations.map((rec, i) => <div className="recap" key={i} style={{ padding: "7px 0" }}><span className="ic">{rec.startsWith("Poste en bonne") ? "✅" : "•"}</span>{rec}</div>)}
+              </div>
+              <div style={{ padding: "8px 16px" }}>
+                <div className="lbl" style={{ marginBottom: 8 }}>Disques</div>
+                {r.disks.map((d) => (
+                  <div className="barrow" key={d.device} style={{ marginBottom: 8 }}>
+                    <span className="bn">{d.device || d.mountpoint}</span>
+                    <span className="track"><span className="fill" style={{ width: `${d.percent}%`, background: dc(d.percent) }} /></span>
+                    <span className="bv" style={{ width: 130 }}>{d.free_gb} Go libres / {d.total_gb} Go</span>
+                  </div>
+                ))}
+              </div>
+              {r.pending_reboot && <div className="note" style={{ background: "rgba(251,191,36,0.1)", borderColor: "var(--watch)" }}>🔄 <b>Redémarrage en attente</b> : {r.reboot_reasons.join(", ")}.</div>}
+            </>
+          )}
+        </Card>
+        <Card title="Nettoyage des fichiers temporaires" right={r ? `${r.temp_total_mb} Mo` : ""}>
+          <div className="note">Supprime les fichiers temporaires (modifiés il y a plus d'1h, pour éviter les fichiers en cours d'usage). <b>Dry-run d'abord</b>, puis suppression <b>sur confirmation</b>. Jamais hors des dossiers temp.</div>
+          {(r?.temp_paths || []).map((t) => <div className="row" key={t.path}><span className="nm mono" style={{ fontSize: 11 }}>{t.path}</span><span className="ds">{t.files} fichiers</span><span className="stt" style={{ marginLeft: "auto" }}>{t.size_mb} Mo</span></div>)}
+          <div className="actions">
+            {stage === "idle" && <button className="btn" disabled={busy} onClick={dry}>{busy ? "Calcul…" : "Estimer l'espace récupérable (dry-run)"}</button>}
+            {stage === "confirm" && clean && (
+              <>
+                <span style={{ color: "var(--soft)", fontSize: 12.5 }}>~<b style={{ color: "var(--accent)" }}>{clean.reclaimable_mb} Mo</b> récupérables.</span>
+                <button className="btn" disabled={busy} onClick={apply}>Confirmer le nettoyage</button>
+                <button className="btn ghost" onClick={() => setStage("idle")}>Annuler</button>
+              </>
+            )}
+            {stage === "done" && clean && <span style={{ color: "var(--safe)", fontSize: 13 }}>✅ {clean.deleted_files} fichier(s) supprimé(s), {clean.freed_mb} Mo libérés{clean.errors ? ` (${clean.errors} verrouillés, ignorés)` : ""}.</span>}
+          </div>
+        </Card>
+      </div>
+      <div className="col">
+        <Card title="Programmes au démarrage" right={r ? String(r.startup.length) : ""}>
+          <div className="note">Applications lancées au démarrage de Windows (registre + dossier Démarrage). En désactiver depuis le Gestionnaire des tâches accélère le boot.</div>
+          {(r?.startup || []).map((s, i) => (
+            <div className="row" key={i}>
+              <span className="nm">{s.name}</span>
+              {s.command && <span className="ds mono" style={{ fontSize: 10 }}>{s.command.slice(0, 40)}</span>}
+              <span className="stt" style={{ marginLeft: "auto" }}>{s.source}</span>
+            </div>
+          ))}
+          {r && r.startup.length === 0 && <div className="empty">Aucun programme au démarrage détecté.</div>}
+        </Card>
+      </div>
+    </div>
+  );
+}
+
 /* ============ APP ============ */
 const TABS: [string, string, string?][] = [
   ["dashboard", "Dashboard"],
@@ -1095,6 +1163,7 @@ const TABS: [string, string, string?][] = [
   ["recon", "Recon"],
   ["offensif", "Offensif"],
   ["soc", "SOC local"],
+  ["sante", "Santé"],
   ["connecteurs", "Connecteurs"],
   ["diagnostic", "Diagnostic"],
 ];
@@ -1128,6 +1197,7 @@ export default function App() {
   const defender = usePolling(api.defender, 12000);
   const connectors = usePolling(api.connectors, 6000);
   const config = usePolling(api.config, 15000);
+  const healthRep = usePolling(api.healthReport, 12000);
   const [traceLabel, setTraceLabel] = useState("");
   const runTrace = (t: string) => { setTraceTarget(t); api.traceRun(t); };
   const selectEndpoint = (ip: string) => {
@@ -1195,6 +1265,7 @@ export default function App() {
       {tab === "recon" && <Recon lan={lan.data} scan={scan.data} procvuln={procvuln.data} onScan={(t, m) => api.scanRun(t, m)} />}
       {tab === "offensif" && <Offensif airgapped={airgapped} wifi={wifi.data} />}
       {tab === "soc" && <Soc hids={hids.data} defender={defender.data} />}
+      {tab === "sante" && <Health report={healthRep.data} />}
       {tab === "connecteurs" && <Connecteurs airgapped={airgapped} connectors={connectors.data || []} onRefresh={() => api.connectors().then((d) => (connectors.data = d)).catch(() => {})} />}
       {tab === "diagnostic" && <Diagnostic logs={logs.data || []} history={history.data || []} timeline={timeline.data || []} beaconing={beaconing.data || []} config={config.data} />}
 

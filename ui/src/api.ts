@@ -81,6 +81,11 @@ export interface IntelResult { available: boolean; reason?: string; ip?: string;
 export interface OsintResult { available: boolean; reason?: string; error?: string; domain?: string; subdomains: string[]; }
 export interface LlmResult { ok: boolean; analysis?: string; error?: string; }
 export interface Snapshot { id: number; taken_at: string; exposure_score: number; band: string; total: number; safe: number; watch: number; suspect: number; crit: number; }
+export interface DiskInfo { device: string; mountpoint: string; total_gb: number; used_gb: number; free_gb: number; percent: number; }
+export interface TempInfo { path: string; size_mb: number; files: number; }
+export interface StartupItem { name: string; command: string; source: string; }
+export interface HealthReport { available: boolean; platform_ok: boolean; disks: DiskInfo[]; temp_paths: TempInfo[]; temp_total_mb: number; startup: StartupItem[]; pending_reboot: boolean; reboot_reasons: string[]; recommendations: string[]; running: boolean; }
+export interface CleanResult { dry_run: boolean; reclaimable_mb: number; freed_mb: number; deleted_files: number; errors: number; }
 
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(BASE + path);
@@ -153,6 +158,9 @@ export const api = {
     if (!res.ok) throw new Error("crack");
     return res.json();
   },
+  healthReport: () => get<HealthReport>("/health/report"),
+  healthRun: () => post<{ ok: boolean }>("/health/run", {}),
+  healthClean: (dry_run: boolean) => post<CleanResult>("/health/clean", { dry_run }),
   reportUrl: BASE + "/report/markdown",
   logsExportUrl: BASE + "/diagnostic/logs/export",
 };
