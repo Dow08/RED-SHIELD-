@@ -23,6 +23,23 @@ _NMAP_CANDIDATES = [r"C:\Program Files (x86)\Nmap\nmap.exe", r"C:\Program Files\
 _CVE_PATH = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "data", "cve_local.json"))
 
 
+def _version_matches(version: str, tokens: list[str]) -> bool:
+    """Correspondance de version robuste (évite que '2.4.4' matche '2.4.49').
+
+    - Un token finissant par '.' est un préfixe de ligne (ex. '6.' → toute la 6.x).
+    - Sinon, correspondance exacte ou suivie d'une borne (., p, espace, -) :
+      '2.4.7' matche '2.4.7' / '2.4.7p1' / '2.4.7 Ubuntu' mais PAS '2.4.79'.
+    """
+    v = (version or "").strip()
+    for tok in tokens:
+        if tok.endswith("."):
+            if v.startswith(tok):
+                return True
+        elif v == tok or any(v.startswith(tok + b) for b in (".", "p", " ", "-")):
+            return True
+    return False
+
+
 def _find_nmap() -> str | None:
     found = shutil.which("nmap")
     if found:
@@ -169,7 +186,7 @@ class ScanModule(Module):
         if not p or not v:
             return out
         for e in self._cve:
-            if e["product"].lower() in p and any(v.startswith(tok) or v == tok for tok in e["versions"]):
+            if e["product"].lower() in p and _version_matches(v, e["versions"]):
                 out.append(Cve(cve=e["cve"], cvss=e["cvss"], severity=e["severity"], summary=e["summary"], url=e["url"]))
         return out
 
