@@ -14,6 +14,43 @@ const bandColor = (band: string) => (band === "critique" ? "var(--crit)" : band 
 const bandLabel = (band: string) => (band === "critique" ? "Exposition critique" : band === "elevee" ? "Exposition élevée" : "Exposition faible");
 const fr = (n: number) => n.toFixed(1).replace(".", ",");
 
+const THEMES: [string, string, string][] = [
+  ["mix", "Teal (défaut)", "#2fe0d0"],
+  ["aurora", "Aurora", "#a78bfa"],
+  ["signal", "Signal", "#c5f82a"],
+  ["holo", "Holo HUD", "#35e6e0"],
+];
+function ThemeSelector() {
+  const [theme, setTheme] = useState<string>(() => localStorage.getItem("red-theme") || "mix");
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("red-theme", theme);
+  }, [theme]);
+  useEffect(() => {
+    const close = () => setOpen(false);
+    if (open) { document.addEventListener("click", close); return () => document.removeEventListener("click", close); }
+  }, [open]);
+  const cur = THEMES.find((t) => t[0] === theme) || THEMES[0];
+  return (
+    <div className="dd" onClick={(e) => e.stopPropagation()}>
+      <button className="pill" style={{ cursor: "pointer" }} onClick={() => setOpen((o) => !o)} title="Changer de thème (en direct)">
+        <span className="on" style={{ background: cur[2], boxShadow: `0 0 8px ${cur[2]}` }}></span>Thème <b style={{ color: "var(--ink)" }}>{cur[1].split(" ")[0]}</b>
+      </button>
+      {open && (
+        <div className="dd-panel" style={{ right: 0, left: "auto" }}>
+          <div className="dd-grp">Thème (live)</div>
+          {THEMES.map(([id, label, color]) => (
+            <div className="dd-item" key={id} onClick={() => { setTheme(id); setOpen(false); }}>
+              <span className="d" style={{ background: color, boxShadow: `0 0 6px ${color}` }}></span>{label}{theme === id ? " ✓" : ""}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Card({ title, right, children, className }: { title: string; right?: React.ReactNode; children: React.ReactNode; className?: string }) {
   const [collapsed, setCollapsed] = useState(false);
   return (
@@ -850,6 +887,7 @@ export default function App() {
         <div className="gm"><div className="num" style={{ color: bandColor(exposure.data?.band ?? "faible") }}>{exposure.data?.score ?? "—"}</div><div><div className="lab">Exposition</div><div className="band" style={{ color: bandColor(exposure.data?.band ?? "faible") }}>{exposure.data ? bandLabel(exposure.data.band).replace("Exposition ", "") : "…"}</div></div></div>
         <div className="bw"><span><span className="k">↓ DL</span> <span className="dl mono">{fr(bwLast?.d ?? 0)}</span> <span className="k">Mo/s</span></span><span><span className="k">↑ UL</span> <span className="ul mono">{fr(bwLast?.u ?? 0)}</span> <span className="k">Mo/s</span></span></div>
         <div className="spacer"></div>
+        <ThemeSelector />
         <div className={`pill ${airgapped ? "" : "off"}`} style={{ cursor: "pointer" }} onClick={async () => { await api.setAirgapped(!airgapped); }} title="Mode air-gapped : coupe TOUT appel réseau externe (VirusTotal, OSINT, LLM…). Les analyses restent 100 % locales. Clique pour activer/désactiver — désactive-le pour utiliser les connecteurs.">
           <span className="on"></span>Air-gapped&nbsp;<b>{airgapped ? "ACTIF" : "OFF"}</b>
           <span style={{ marginLeft: 6, color: "var(--faint)" }}>⇄</span>
