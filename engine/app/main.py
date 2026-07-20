@@ -36,6 +36,7 @@ from app.modules.procvuln import ProcVulnModule
 from app.modules.scan import ScanModule, ScanRequest
 from app.modules.scoring import ScoringModule
 from app.modules.shield import ShieldModule
+from app.modules.siem import SiemModule
 from app.modules.throughput import ThroughputModule
 from app.modules.trace import TraceModule
 from app.modules.wifi import WifiModule
@@ -87,6 +88,7 @@ def register_modules(registry: Registry, bus: EventBus) -> None:
     connectors = ConnectorsModule(bus)
     registry.register(connectors)
     registry.register(IntelModule(bus, connectors))
+    registry.register(SiemModule(bus, connectors))
     registry.register(OsintModule(bus))
     registry.register(LlmModule(bus, connectors))
     registry.register(AnalyticsModule(bus, shield, scoring))
@@ -314,6 +316,19 @@ def create_app() -> FastAPI:
     @app.get("/intel/ip")
     def intel_ip(ip: str):
         return _require("intel").lookup_ip(ip)
+
+    @app.get("/siem/status")
+    def siem_status():
+        module = registry.get("siem")
+        return module.status() if module is not None else {"configured": False}
+
+    @app.post("/siem/test")
+    def siem_test():
+        return _require("siem").test()
+
+    @app.get("/siem/alerts")
+    def siem_alerts():
+        return _require("siem").alerts()
 
     @app.post("/osint/subdomains")
     def osint_subdomains(req: OsintReq):

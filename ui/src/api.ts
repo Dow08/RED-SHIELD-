@@ -139,6 +139,9 @@ export const api = {
   connectorSet: (name: string, key: string) => post<{ ok: boolean }>(`/connectors/${name}`, { key }),
   connectorDelete: async (name: string) => { await fetch(BASE + `/connectors/${name}`, { method: "DELETE" }); },
   intelIp: (ip: string) => get<IntelResult>(`/intel/ip?ip=${encodeURIComponent(ip)}`),
+  siemStatus: () => get<{ configured: boolean; airgapped: boolean; type: string; url: string }>("/siem/status"),
+  siemTest: () => post<{ available: boolean; ok?: boolean; status_code?: number; error?: string; reason?: string }>("/siem/test", {}),
+  siemAlerts: () => get<{ available: boolean; alerts: { time: string; level: string; rule: string; agent: string; description: string }[]; error?: string; reason?: string }>("/siem/alerts"),
   osintSubdomains: (domain: string) => post<OsintResult>("/osint/subdomains", { domain }),
   llmAnalyze: (text: string, kind: string) => post<LlmResult>("/llm/analyze", { text, kind }),
   crack: async (payload: { algo: string; target: string; salt?: string; iterations?: number; dklen?: number; words: string[] }): Promise<CrackResult> => {

@@ -936,10 +936,14 @@ function Soc({ hids, defender }: { hids: HidsResult | null; defender: import("./
 function Connecteurs({ airgapped, connectors, onRefresh }: { airgapped: boolean; connectors: ConnectorStatus[]; onRefresh: () => void }) {
   const [keys, setKeys] = useState<Record<string, string>>({});
   const [llm, setLlm] = useState({ provider: "ollama", url: "http://localhost:11434", model: "llama3", key: "" });
+  const [siem, setSiem] = useState({ type: "wazuh", url: "", token: "" });
+  const [siemMsg, setSiemMsg] = useState("");
   const connected = (n: string) => connectors.find((c) => c.name === n)?.connected;
   const save = async (n: string) => { await api.connectorSet(n, keys[n] || ""); setKeys({ ...keys, [n]: "" }); onRefresh(); };
   const del = async (n: string) => { await api.connectorDelete(n); onRefresh(); };
   const saveLlm = async () => { await api.connectorSet("llm", JSON.stringify(llm)); onRefresh(); };
+  const saveSiem = async () => { await api.connectorSet("siem", JSON.stringify(siem)); onRefresh(); setSiemMsg("Enregistré."); };
+  const testSiem = async () => { setSiemMsg("Test…"); try { const r = await api.siemTest(); setSiemMsg(r.reason || (r.ok ? `Connexion OK (HTTP ${r.status_code})` : (r.error || `HTTP ${r.status_code}`))); } catch { setSiemMsg("échec"); } };
   const simple: [string, string][] = [["virustotal", "VirusTotal"], ["abuseipdb", "AbuseIPDB"], ["greynoise", "GreyNoise"], ["shodan", "Shodan"]];
   return (
     <Card title="Connecteurs — clés API" right="chiffrées (keyring OS)">
@@ -963,6 +967,20 @@ function Connecteurs({ airgapped, connectors, onRefresh }: { airgapped: boolean;
         {connected("llm") ? <><span className="stt on">connecté ✓</span><button className="btn ghost" onClick={() => del("llm")}>Supprimer</button></> : <span className="stt off">non connecté</span>}
       </div>
       <div className="disc" style={{ padding: "10px 16px" }}>💡 Ollama (local, gratuit, hors-ligne) fonctionne même sous air-gapped. Anthropic/OpenAI = clé perso + air-gapped OFF.</div>
+
+      <div className="card-h" style={{ marginTop: 4 }}><h2>SIEM / EDR — récupération de logs</h2></div>
+      <div className="note">Connecte un <b>SIEM</b> pour rapatrier ses alertes (analyse + conseil de remédiation). L'<b>EDR local</b> de cette machine est déjà couvert par <b>Windows Defender</b> (onglet SOC). Nécessite <b>air-gapped OFF</b> + une instance joignable.</div>
+      <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
+        <span className="nm">SIEM</span>
+        <span className="seg">{["wazuh", "elastic", "generic"].map((p) => <button key={p} className={siem.type === p ? "on" : ""} onClick={() => setSiem({ ...siem, type: p })}>{p}</button>)}</span>
+        <input className="key" style={{ letterSpacing: 0, width: 240 }} value={siem.url} onChange={(e) => setSiem({ ...siem, url: e.target.value })} placeholder="URL API (ex. https://wazuh:55000/...)" />
+        <input className="key" type="password" style={{ width: 150 }} value={siem.token} onChange={(e) => setSiem({ ...siem, token: e.target.value })} placeholder="token / clé API" />
+        <button className="btn ghost" disabled={!siem.url.trim()} onClick={saveSiem}>Enregistrer</button>
+        <button className="btn ghost" disabled={!connected("siem")} onClick={testSiem}>Tester</button>
+        {connected("siem") ? <><span className="stt on">configuré ✓</span><button className="btn ghost" onClick={() => del("siem")}>Supprimer</button></> : <span className="stt off">non configuré</span>}
+      </div>
+      {siemMsg && <div className="disc" style={{ padding: "0 16px 10px", color: "var(--accent)" }}>{siemMsg}</div>}
+      <div className="disc" style={{ padding: "0 16px 14px" }}>Formats supportés : Wazuh (API REST), Elasticsearch (_search), ou tout endpoint JSON renvoyant une liste d'alertes. Les alertes rapatriées apparaissent dans le SOC.</div>
     </Card>
   );
 }
