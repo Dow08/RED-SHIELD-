@@ -6,9 +6,10 @@ DNS inverse. Aucune donnée inventée ; dégradation gracieuse si un process est
 from __future__ import annotations
 
 import ipaddress
+import queue
 import socket
+import threading
 from collections import Counter
-from concurrent.futures import ThreadPoolExecutor
 
 import psutil
 from pydantic import BaseModel
@@ -54,19 +55,36 @@ class ShieldModule(Module):
         super().__init__(bus)
         self._dns_cache: dict[str, str | None] = {}
         self._dns_pending: set[str] = set()
-        self._executor: ThreadPoolExecutor | None = None
+        self._dns_queue: "queue.Queue[str]" = queue.Queue()
+        self._dns_stop = threading.Event()
+        self._dns_workers: list[threading.Thread] = []
 
     def start(self) -> None:
         # Vérifie que psutil peut lire les connexions sur cette plateforme.
         psutil.net_connections(kind="inet")
-        self._executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="red-dns")
+        # Résolution DNS via threads DAEMON (ne bloquent pas la sortie du process).
+        self._dns_stop.clear()
+        self._dns_workers = [threading.Thread(target=self._dns_worker, daemon=True) for _ in range(4)]
+        for t in self._dns_workers:
+            t.start()
         self.set_status(ModuleStatus.ACTIVE)
 
     def stop(self) -> None:
-        if self._executor is not None:
-            self._executor.shutdown(wait=False, cancel_futures=True)
-            self._executor = None
+        self._dns_stop.set()
         super().stop()
+
+    def _dns_worker(self) -> None:
+        while not self._dns_stop.is_set():
+            try:
+                ip = self._dns_queue.get(timeout=0.5)
+            except queue.Empty:
+                continue
+            try:
+                name: str | None = socket.gethostbyaddr(ip)[0]
+            except (socket.herror, socket.gaierror, OSError):
+                name = None
+            self._dns_cache[ip] = name
+            self._dns_pending.discard(ip)
 
     # -- process / lignée ------------------------------------------------
     def _proc_info(self, pid: int | None, cache: dict[int, dict]) -> dict:
@@ -109,20 +127,12 @@ class ShieldModule(Module):
         return self._lineage(pid, {})
 
     # -- DNS inverse (résolu en arrière-plan pour ne pas bloquer l'endpoint) ----
-    def _resolve_task(self, ip: str) -> None:
-        try:
-            name: str | None = socket.gethostbyaddr(ip)[0]
-        except (socket.herror, socket.gaierror, OSError):
-            name = None
-        self._dns_cache[ip] = name
-        self._dns_pending.discard(ip)
-
     def _rdns(self, ip: str) -> str | None:
         if ip in self._dns_cache:
             return self._dns_cache[ip]
-        if self._executor is not None and ip not in self._dns_pending:
+        if ip not in self._dns_pending:
             self._dns_pending.add(ip)
-            self._executor.submit(self._resolve_task, ip)
+            self._dns_queue.put(ip)
         return None  # pas encore résolu ; sera disponible aux prochains appels
 
     # -- connexions ------------------------------------------------------

@@ -19,7 +19,9 @@ from app.modules.base import ModuleStatus
 from app.modules.bandwidth import BandwidthModule
 from app.modules.cracker import CrackerModule, CrackRequest
 from app.modules.firewall import FirewallModule, FwRequest
+from app.modules.hids import HidsModule
 from app.modules.lan import LanModule
+from app.modules.mail import MailModule, MailRequest
 from app.modules.diagnostic import DiagnosticModule
 from app.modules.persistence import PersistenceModule
 from app.modules.scan import ScanModule, ScanRequest
@@ -50,6 +52,8 @@ def register_modules(registry: Registry, bus: EventBus) -> None:
     registry.register(FirewallModule(bus))
     registry.register(LanModule(bus))
     registry.register(ScanModule(bus))
+    registry.register(HidsModule(bus))
+    registry.register(MailModule(bus))
     registry.register(AnalyticsModule(bus, shield, scoring))
 
 
@@ -174,6 +178,20 @@ def create_app() -> FastAPI:
         if persist is not None and persist.health() == ModuleStatus.ACTIVE and result.get("ok"):
             persist.add_audit("scan", f"{req.target} ({req.mode})")
         return result
+
+    @app.get("/hids")
+    def hids_get():
+        module = registry.get("hids")
+        return module.get() if module is not None else {}
+
+    @app.post("/hids/run")
+    def hids_run():
+        module = registry.get("hids")
+        return module.run_async() if module is not None else {"ok": False, "error": "indisponible"}
+
+    @app.post("/mail/analyze")
+    def mail_analyze(req: MailRequest):
+        return _require("mail").analyze(req.eml)
 
     @app.get("/analytics/timeline")
     def analytics_timeline(limit: int = 100):

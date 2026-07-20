@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
-import type { Beacon, CrackResult, LanDevice, ScanResult, ScoredConnection, Severity, TimelineEvent, TraceResult, WifiNet } from "./api";
+import type { Beacon, CrackResult, HidsResult, LanDevice, MailAnalysis, ScanResult, ScoredConnection, Severity, TimelineEvent, TraceResult, WifiNet } from "./api";
 import { usePolling } from "./hooks";
 import { BandwidthChart, NetworkGraph, Sparkline, TraceMap } from "./viz";
 
@@ -544,6 +544,66 @@ function Offensif() {
   );
 }
 
+/* ============ SOC LOCAL (HIDS + Mail Security) ============ */
+function Soc({ hids }: { hids: HidsResult | null }) {
+  const [eml, setEml] = useState("");
+  const [mail, setMail] = useState<MailAnalysis | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { api.hidsRun().catch(() => {}); }, []); // lance l'analyse des événements à l'ouverture
+  const ta: React.CSSProperties = { width: "100%", background: "var(--card-solid)", border: "1px solid var(--card-b)", borderRadius: 8, color: "var(--ink)", fontFamily: "var(--mono)", fontSize: 12, padding: 10 };
+  const analyze = async () => { setBusy(true); setMail(null); try { setMail(await api.mailAnalyze(eml)); } catch { setMail({ from_addr: "", from_name: "", subject: "", date: "", spf: "?", dkim: "?", dmarc: "?", links: [], attachments: [], risk: 0, severity: "safe", reasons: [], error: "moteur injoignable" }); } setBusy(false); };
+  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => { const f = e.target.files?.[0]; if (!f) return; const r = new FileReader(); r.onload = () => setEml(String(r.result || "")); r.readAsText(f); };
+  const mech = (v: string) => (v === "pass" ? "var(--safe)" : v === "fail" ? "var(--crit)" : "var(--faint)");
+  const sevCol = (s: string) => (s === "crit" ? "var(--crit)" : s === "suspect" ? "var(--crit)" : s === "watch" ? "var(--watch)" : "var(--safe)");
+  return (
+    <div className="grid">
+      <div className="col">
+        <Card title="Mail Security (.eml)" right="local · sans identifiant">
+          <div className="note">Dépose ou colle un email (.eml — via « Afficher l'original »). Analyse <b>SPF/DKIM/DMARC</b> + liens/pièces jointes. Aucun accès à ta boîte, aucun mot de passe, aucun appel externe.</div>
+          <div style={{ padding: "10px 16px" }}>
+            <input type="file" accept=".eml,.txt,message/rfc822" onChange={onFile} style={{ marginBottom: 8, color: "var(--soft)", fontSize: 12 }} />
+            <textarea value={eml} onChange={(e) => setEml(e.target.value)} rows={6} style={ta} placeholder="…ou colle ici la source de l'email" />
+          </div>
+          <div className="actions"><button className="btn" disabled={!eml.trim() || busy} onClick={analyze}>{busy ? "Analyse…" : "Analyser le mail"}</button></div>
+          {mail?.error && <div className="empty">Erreur : {mail.error}</div>}
+          {mail && !mail.error && (
+            <div className="rcard">
+              <div className="rhead">
+                <span className="pr" style={{ color: sevCol(mail.severity), borderColor: sevCol(mail.severity), background: "transparent" }}>{mail.severity.toUpperCase()} · {mail.risk}/100</span>
+                <span className="rtitle" style={{ fontSize: 13 }}>{mail.subject || "(sans objet)"}</span>
+              </div>
+              <div className="rbody"><b>Expéditeur :</b> {mail.from_name} &lt;{mail.from_addr}&gt;</div>
+              <div className="rmeta">
+                <span className="badge" style={{ color: mech(mail.spf), borderColor: mech(mail.spf) }}>SPF {mail.spf}</span>
+                <span className="badge" style={{ color: mech(mail.dkim), borderColor: mech(mail.dkim) }}>DKIM {mail.dkim}</span>
+                <span className="badge" style={{ color: mech(mail.dmarc), borderColor: mech(mail.dmarc) }}>DMARC {mail.dmarc}</span>
+              </div>
+              {mail.reasons.length > 0 && <div className="rbody"><b>Ce qui ne va pas :</b><ul className="steps">{mail.reasons.map((r, i) => <li key={i}>{r}</li>)}</ul></div>}
+              {mail.links.some((l) => l.suspicious) && <div className="rbody"><b>Liens suspects :</b> {mail.links.filter((l) => l.suspicious).map((l) => `${l.url} (${l.reason})`).join(" · ")}</div>}
+              {mail.attachments.some((a) => a.risky) && <div className="rbody" style={{ color: "var(--crit)" }}><b>Pièces jointes à risque :</b> {mail.attachments.filter((a) => a.risky).map((a) => a.filename).join(", ")}</div>}
+              <div className="rbody"><b>Remédiation :</b> {mail.severity === "safe" ? "Aucune anomalie majeure — rester vigilant sur les liens." : "Ne clique aucun lien, n'ouvre aucune pièce jointe, ne réponds pas. Signale/supprime après vérification de l'expéditeur par un autre canal."}</div>
+            </div>
+          )}
+        </Card>
+      </div>
+      <div className="col">
+        <Card title="HIDS-lite — événements Windows" right={<button className="btn ghost" style={{ padding: "5px 10px" }} onClick={() => api.hidsRun()}>Analyser</button>}>
+          <div className="note">Mini-SOC local : services installés, échecs de connexion, détections Defender, Sysmon si présent. Lecture seule, aucun SIEM.</div>
+          {hids?.note && <div className="disc" style={{ padding: "6px 16px" }}>ℹ️ {hids.note}</div>}
+          {(hids?.events || []).slice(0, 40).map((e, i) => (
+            <div className="log" key={i}>
+              <span className="ts">{e.ts.slice(0, 19).replace("T", " ")}</span>
+              <span className={`lv ${e.severity === "crit" ? "error" : e.severity === "watch" ? "warn" : "info"}`}>{e.event_id}</span>
+              <span className="ms">{e.label} <span className="muted">({e.log.split("/").pop()})</span></span>
+            </div>
+          ))}
+          {(!hids || hids.events.length === 0) && <div className="empty">{hids?.running ? "Analyse en cours…" : "Clique « Analyser » pour lire les événements."}</div>}
+        </Card>
+      </div>
+    </div>
+  );
+}
+
 /* ============ CONNECTEURS ============ */
 function Connecteurs({ airgapped }: { airgapped: boolean }) {
   const items = ["VirusTotal", "AbuseIPDB", "GreyNoise", "Shodan", "Wazuh (SIEM)", "Microsoft Defender (EDR)", "LLM (rapport IA)"];
@@ -628,6 +688,7 @@ const TABS: [string, string, string?][] = [
   ["remediation", "Remédiation"],
   ["recon", "Recon & WiFi", "J3-J4"],
   ["offensif", "Offensif"],
+  ["soc", "SOC local"],
   ["connecteurs", "Connecteurs", "J2"],
   ["diagnostic", "Diagnostic"],
 ];
@@ -649,6 +710,7 @@ export default function App() {
   const beaconing = usePolling(api.beaconing, 10000);
   const lan = usePolling(api.lan, 20000);
   const scan = usePolling(api.scan, 4000);
+  const hids = usePolling(api.hids, 8000);
   const [traceLabel, setTraceLabel] = useState("");
   const runTrace = (t: string) => { setTraceTarget(t); api.traceRun(t); };
   const selectEndpoint = (ip: string) => {
@@ -700,6 +762,7 @@ export default function App() {
       {tab === "remediation" && <Remediation conns={conns} />}
       {tab === "recon" && <Recon wifi={wifi.data} lan={lan.data} scan={scan.data} onScan={(t, m) => api.scanRun(t, m)} />}
       {tab === "offensif" && <Offensif />}
+      {tab === "soc" && <Soc hids={hids.data} />}
       {tab === "connecteurs" && <Connecteurs airgapped={airgapped} />}
       {tab === "diagnostic" && <Diagnostic logs={logs.data || []} history={history.data || []} timeline={timeline.data || []} beaconing={beaconing.data || []} />}
 
