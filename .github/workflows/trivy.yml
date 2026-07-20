@@ -1,0 +1,54 @@
+name: Trivy — scan de sécurité
+
+# Analyse de sécurité automatique à chaque push/PR sur main + hebdomadaire.
+# Trivy détecte : vulnérabilités des dépendances, secrets accidentellement
+# commités, et mauvaises configurations. Le rapport remonte dans l'onglet
+# « Security » du dépôt, et le job échoue si un secret ou une faille
+# CRITICAL/HIGH est trouvé.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '0 6 * * 1'   # tous les lundis à 06:00 UTC
+  workflow_dispatch:        # lancement manuel possible
+
+permissions:
+  contents: read
+  security-events: write    # nécessaire pour publier le SARIF dans « Security »
+
+jobs:
+  trivy:
+    name: Analyse Trivy (vulnérabilités · secrets · config)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Récupération du code
+        uses: actions/checkout@v4
+
+      - name: Scan Trivy → rapport SARIF
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH,MEDIUM
+
+      - name: Publication du rapport dans l'onglet Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+
+      - name: Échec si secret ou vulnérabilité CRITICAL/HIGH
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '1'
