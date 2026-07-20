@@ -257,8 +257,9 @@ export function NetworkGraph({ conns, view, onSelect, trace }: { conns: ScoredCo
     const build = () => {
       const { conns, view, trace } = state.current;
       let list: { sev: string; label: string; ip: string }[];
-      if (view === "entrant") {
-        // Pas de connexions entrantes suivies au Jalon 1 → on montre le chemin vers l'IP publique de la box (via le trace).
+      const inbound = conns.filter((c) => c.direction === "entrant");
+      if (view === "entrant" && inbound.length === 0) {
+        // Aucune connexion entrante active → on montre le chemin vers l'IP publique de la box (via le trace).
         list = [];
         const hops = trace?.hops || [];
         const gw = hops.find((h) => h.private);
@@ -268,7 +269,8 @@ export function NetworkGraph({ conns, view, onSelect, trace }: { conns: ScoredCo
         const byRemote = new Map<string, { sev: string; label: string; ip: string }>();
         for (const c of conns) {
           const priv = isPrivate(c.remote_addr);
-          if (view === "sortant" && priv) continue;
+          if (view === "sortant" && (priv || c.direction === "entrant")) continue;
+          if (view === "entrant" && c.direction !== "entrant") continue;
           if (view === "local" && !priv) continue;
           const prev = byRemote.get(c.remote_addr);
           if (!prev || sevRank[c.severity] > sevRank[prev.sev]) byRemote.set(c.remote_addr, { sev: c.severity, label: c.remote_dns || c.remote_addr, ip: c.remote_addr });

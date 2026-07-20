@@ -17,10 +17,21 @@ export interface ScoredConnection {
   port: number;
   protocol: string;
   status: string;
+  direction: string;
   risk: number;
   severity: Severity;
   reasons: string[];
   mitre: MitreTag[];
+}
+
+export interface Listener { pid: number | null; process: string; exe: string; addr: string; port: number; protocol: string; exposed: boolean; }
+export interface PortCount { port: number; count: number; service: string; encrypted: boolean; }
+export interface KeyCount { key: string; count: number; }
+export interface NetMetrics {
+  total: number; inbound: number; outbound: number; tcp: number; udp: number;
+  encrypted: number; clear: number; endpoints: number;
+  listeners: number; listeners_exposed: number;
+  countries: KeyCount[]; top_ports: PortCount[];
 }
 
 export interface Exposure {
@@ -75,6 +86,8 @@ export const api = {
   modules: () => get<ModuleInfo[]>("/modules"),
   connections: () => get<ScoredConnection[]>("/shield/connections"),
   topTalkers: () => get<TopTalker[]>("/shield/top-talkers"),
+  listeners: () => get<Listener[]>("/shield/listeners"),
+  metrics: () => get<NetMetrics>("/shield/metrics"),
   bandwidth: () => get<Bandwidth>("/bandwidth"),
   exposure: () => get<Exposure>("/exposure"),
   logs: (level?: string) => get<LogEntry[]>("/diagnostic/logs" + (level ? `?level=${level}` : "")),

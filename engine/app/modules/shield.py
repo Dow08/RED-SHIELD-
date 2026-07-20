@@ -37,12 +37,64 @@ class Connection(BaseModel):
     port: int
     protocol: str
     status: str
+    direction: str = "sortant"  # "entrant" (vers un port en écoute local) ou "sortant"
+
+
+class Listener(BaseModel):
+    """Port en écoute = point d'entrée potentiel (surface d'exposition entrante)."""
+    pid: int | None
+    process: str
+    exe: str = ""
+    addr: str = ""       # IP de liaison locale
+    port: int
+    protocol: str
+    exposed: bool        # True = liée à 0.0.0.0/:: ou une IP réseau (joignable depuis le LAN/WAN)
+
+
+class PortCount(BaseModel):
+    port: int
+    count: int
+    service: str = ""
+    encrypted: bool = False
+
+
+class KeyCount(BaseModel):
+    key: str
+    count: int
+
+
+class NetMetrics(BaseModel):
+    total: int = 0
+    inbound: int = 0
+    outbound: int = 0
+    tcp: int = 0
+    udp: int = 0
+    encrypted: int = 0
+    clear: int = 0
+    endpoints: int = 0
+    listeners: int = 0
+    listeners_exposed: int = 0
+    countries: list[KeyCount] = []
+    top_ports: list[PortCount] = []
 
 
 class TopTalker(BaseModel):
     pid: int
     process: str
     connections: int
+
+
+# Ports chiffrés courants (transport TLS/SSH/…) — pour le ratio chiffré/clair.
+_ENCRYPTED_PORTS = {22, 443, 465, 563, 636, 853, 989, 990, 993, 995, 5061, 6697, 8443}
+# Libellés de services courants (indicatif, pour l'affichage des top ports).
+_PORT_SERVICE = {
+    20: "ftp-data", 21: "ftp", 22: "ssh", 23: "telnet", 25: "smtp", 53: "dns",
+    80: "http", 110: "pop3", 123: "ntp", 143: "imap", 161: "snmp", 389: "ldap",
+    443: "https", 445: "smb", 465: "smtps", 587: "smtp", 636: "ldaps", 853: "dns-tls",
+    993: "imaps", 995: "pop3s", 1433: "mssql", 3306: "mysql", 3389: "rdp",
+    5432: "postgres", 5672: "amqp", 5900: "vnc", 6379: "redis", 8080: "http-alt",
+    8443: "https-alt", 9200: "elastic", 27017: "mongodb",
+}
 
 
 class ShieldModule(Module):
@@ -135,11 +187,18 @@ class ShieldModule(Module):
             self._dns_queue.put(ip)
         return None  # pas encore résolu ; sera disponible aux prochains appels
 
+    @staticmethod
+    def _listen_ports(raw: list) -> set[int]:
+        """Ports locaux en écoute (servent à distinguer les connexions entrantes)."""
+        return {c.laddr.port for c in raw if c.status == psutil.CONN_LISTEN and c.laddr}
+
     # -- connexions ------------------------------------------------------
     def get_connections(self, resolve_dns: bool = True) -> list[Connection]:
         conns: list[Connection] = []
         cache: dict[int, dict] = {}
-        for c in psutil.net_connections(kind="inet"):
+        raw = psutil.net_connections(kind="inet")
+        listen_ports = self._listen_ports(raw)
+        for c in raw:
             if not c.raddr:  # on ne garde que les connexions avec un endpoint distant
                 continue
             if _is_loopback(c.raddr.ip):  # on ignore le trafic loopback (bruit)
@@ -147,6 +206,8 @@ class ShieldModule(Module):
             info = self._proc_info(c.pid, cache)
             protocol = "tcp" if c.type == socket.SOCK_STREAM else "udp"
             remote_ip = c.raddr.ip
+            # Entrant = le port local est un port en écoute (un tiers s'est connecté à nous).
+            direction = "entrant" if (c.laddr and c.laddr.port in listen_ports) else "sortant"
             if resolve_dns:
                 resolved = remote_ip in self._dns_cache
                 dns = self._dns_cache.get(remote_ip)
@@ -167,9 +228,80 @@ class ShieldModule(Module):
                     port=c.raddr.port,
                     protocol=protocol,
                     status=c.status,
+                    direction=direction,
                 )
             )
         return conns
+
+    # -- ports en écoute (surface d'exposition entrante) -----------------
+    def get_listeners(self) -> list[Listener]:
+        cache: dict[int, dict] = {}
+        seen: dict[tuple[int, str], Listener] = {}
+        for c in psutil.net_connections(kind="inet"):
+            if c.status != psutil.CONN_LISTEN or not c.laddr:
+                continue
+            info = self._proc_info(c.pid, cache)
+            ip = c.laddr.ip
+            protocol = "tcp" if c.type == socket.SOCK_STREAM else "udp"
+            exposed = not _is_loopback(ip)  # 127.0.0.1/::1 = local seulement
+            key = (c.laddr.port, protocol)
+            prev = seen.get(key)
+            if prev is None:
+                seen[key] = Listener(pid=c.pid, process=info["name"], exe=info["exe"],
+                                     addr=ip, port=c.laddr.port, protocol=protocol, exposed=exposed)
+            elif exposed and not prev.exposed:  # IPv4+IPv6 : on retient la variante exposée
+                prev.exposed = True
+                prev.addr = ip
+        return sorted(seen.values(), key=lambda l: (not l.exposed, l.port))
+
+    # -- métriques réseau agrégées (dashboard) ---------------------------
+    def metrics(self, geo=None) -> NetMetrics:
+        """Agrège les connexions réelles en indicateurs de surveillance.
+
+        `geo` (optionnel) : fonction ip -> {"country": str|None} pour compter les
+        pays distincts hors-ligne (injectée depuis le module trace).
+        """
+        raw = psutil.net_connections(kind="inet")
+        listen_ports = self._listen_ports(raw)
+        m = NetMetrics()
+        ports: Counter[int] = Counter()
+        countries: Counter[str] = Counter()
+        endpoints: set[str] = set()
+        for c in raw:
+            if not c.raddr or _is_loopback(c.raddr.ip):
+                continue
+            m.total += 1
+            if c.laddr and c.laddr.port in listen_ports:
+                m.inbound += 1
+            else:
+                m.outbound += 1
+            if c.type == socket.SOCK_STREAM:
+                m.tcp += 1
+            else:
+                m.udp += 1
+            if c.raddr.port in _ENCRYPTED_PORTS:
+                m.encrypted += 1
+            else:
+                m.clear += 1
+            ports[c.raddr.port] += 1
+            endpoints.add(c.raddr.ip)
+            if geo is not None:
+                try:
+                    g = geo(c.raddr.ip)
+                except Exception:
+                    g = None
+                if g and g.get("country"):
+                    countries[g["country"]] += 1
+        m.endpoints = len(endpoints)
+        listeners = self.get_listeners()
+        m.listeners = len(listeners)
+        m.listeners_exposed = sum(1 for l in listeners if l.exposed)
+        m.countries = [KeyCount(key=k, count=n) for k, n in countries.most_common(6)]
+        m.top_ports = [
+            PortCount(port=p, count=n, service=_PORT_SERVICE.get(p, ""), encrypted=p in _ENCRYPTED_PORTS)
+            for p, n in ports.most_common(6)
+        ]
+        return m
 
     def top_talkers(self) -> list[TopTalker]:
         """Process avec le plus de connexions actives (proxy réel de sollicitation)."""

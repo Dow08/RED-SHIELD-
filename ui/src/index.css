@@ -146,6 +146,7 @@ thead th:hover { color: var(--accent); }
 tbody td { padding: 9px 13px; border-bottom: 1px solid var(--hair); vertical-align: middle; white-space: nowrap; }
 tbody tr:hover { background: rgba(47, 224, 208, 0.05); }
 .proc { color: var(--ink); font-weight: 600; } .pid { color: var(--faint); font-size: 10.5px; }
+.dir { font-family: var(--mono); font-weight: 700; margin-right: 5px; display: inline-block; width: 10px; }
 .path { color: var(--faint); font-size: 10px; font-family: var(--mono); }
 .muted { color: var(--soft); } .nodns { color: var(--crit); font-style: italic; }
 .risk { font-weight: 700; font-family: var(--mono); }
@@ -206,6 +207,20 @@ input.key { background: var(--card-solid); border: 1px solid var(--card-b); bord
 .barrow .track { flex: 1; height: 8px; border-radius: 99px; background: var(--card-solid); overflow: hidden; border: 1px solid var(--card-b); }
 .barrow .fill { height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--accent2), var(--accent)); }
 .barrow .bv { width: 44px; text-align: right; font-family: var(--mono); color: var(--soft); font-size: 11px; }
+/* --- métriques réseau (tuiles HUD) --- */
+.mtiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; padding: 14px; }
+@media (max-width: 720px) { .mtiles { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 460px) { .mtiles { grid-template-columns: 1fr; } }
+.mtile { border: 1px solid var(--card-b); border-radius: 12px; padding: 12px 13px; background: var(--card-solid); display: flex; flex-direction: column; gap: 8px; }
+.mtile .lbl { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); }
+.mtile .mval { font-size: 22px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+.mtile .mval .sep { color: var(--faint); font-weight: 400; margin: 0 2px; }
+.mtile .dual { display: flex; height: 7px; border-radius: 99px; overflow: hidden; background: var(--card); border: 1px solid var(--hair); }
+.mtile .dual span { display: block; height: 100%; transition: width 0.4s ease; }
+.mtile .mlist { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--soft); }
+.mtile .mlist span { display: flex; align-items: baseline; gap: 6px; }
+.mtile .mlist i { margin-left: auto; font-style: normal; font-family: var(--mono); color: var(--faint); font-size: 11px; }
+
 .stage { position: relative; background: linear-gradient(180deg, #0a0d12, #080a0e); }
 canvas { display: block; width: 100%; height: auto; }
 .legend { display: flex; gap: 16px; flex-wrap: wrap; padding: 10px 14px; font-size: 11.5px; color: var(--soft); }

@@ -147,6 +147,19 @@ def create_app() -> FastAPI:
     def shield_top_talkers() -> list:
         return _require("shield").top_talkers()
 
+    @app.get("/shield/listeners")
+    def shield_listeners() -> list:
+        return _require("shield").get_listeners()
+
+    @app.get("/shield/metrics")
+    def shield_metrics():
+        # Géolocalisation des pays via la base hors-ligne du module trace (si dispo).
+        trace_mod = registry.get("trace")
+        geo = None
+        if trace_mod is not None and getattr(trace_mod, "geo_available", False):
+            geo = trace_mod._geo_lookup
+        return _require("shield").metrics(geo=geo)
+
     @app.get("/bandwidth")
     def bandwidth():
         return _require("bandwidth").get_rates()

@@ -146,6 +146,7 @@ function ConnRow({ c, showCols }: { c: ScoredConnection; showCols: Record<string
   return (
     <tr>
       <td>
+        <span className="dir" title={c.direction === "entrant" ? "Connexion entrante (vers un port en écoute)" : "Connexion sortante"} style={{ color: c.direction === "entrant" ? "var(--accent)" : "var(--faint)" }}>{c.direction === "entrant" ? "↓" : "↑"}</span>
         <span className="proc">{c.process}</span> <span className="pid mono">{c.pid}</span>
         {c.mitre.map((t) => <span key={t.id} className="mtag">MITRE {t.id}</span>)}
         {c.exe && c.exe.toLowerCase().includes("temp") && <div className="path">{c.exe}</div>}
@@ -160,7 +161,20 @@ function ConnRow({ c, showCols }: { c: ScoredConnection; showCols: Record<string
 }
 
 /* ============ DASHBOARD ============ */
-function Dashboard({ conns, exposure, modules, logs, bwHist, scoreHist, top, trace, beaconing, sevFilter, onGo, onSelect }: any) {
+function DualBar({ a, b, ca, cb }: { a: number; b: number; ca: string; cb: string }) {
+  const tot = Math.max(1, a + b);
+  return (
+    <span className="dual" title={`${a} / ${b}`}>
+      <span style={{ width: `${(a / tot) * 100}%`, background: ca }} />
+      <span style={{ width: `${(b / tot) * 100}%`, background: cb }} />
+    </span>
+  );
+}
+function Mtile({ label, children }: { label: string; children: React.ReactNode }) {
+  return <div className="mtile"><div className="lbl">{label}</div>{children}</div>;
+}
+function Dashboard({ conns, exposure, metrics, modules, logs, bwHist, scoreHist, top, trace, beaconing, sevFilter, onGo, onSelect }: any) {
+  const m = metrics as import("./api").NetMetrics | undefined;
   const risky = (conns as ScoredConnection[]).filter((c) => c.severity === "suspect" || c.severity === "crit").sort((a, b) => b.risk - a.risk);
   const filtered = (conns as ScoredConnection[]).filter((c) => sevFilter[c.severity]);
   const topConns = [...filtered].sort((a, b) => b.risk - a.risk).slice(0, 4);
@@ -205,11 +219,39 @@ function Dashboard({ conns, exposure, modules, logs, bwHist, scoreHist, top, tra
                     <span className="bv">{t.connections} conn.</span>
                   </div>
                 ))}
-                <div className="disc">Top par nombre de connexions (débit par process = Jalon ultérieur).</div>
+                <div className="disc">Processus classés par nombre de connexions actives.</div>
               </div>
             )}
           </Card>
         </div>
+
+        <Card title="Métriques réseau" right="surveillance live">
+          <div className="mtiles">
+            <Mtile label="Entrant / Sortant">
+              <div className="mval"><b style={{ color: "var(--accent)" }}>{m?.inbound ?? 0}</b> <span className="sep">/</span> <b>{m?.outbound ?? 0}</b></div>
+              <DualBar a={m?.inbound ?? 0} b={m?.outbound ?? 0} ca="var(--accent)" cb="var(--accent2)" />
+            </Mtile>
+            <Mtile label="Chiffré / Clair">
+              <div className="mval"><b style={{ color: "var(--safe)" }}>{m?.encrypted ?? 0}</b> <span className="sep">/</span> <b style={{ color: (m?.clear ?? 0) > 0 ? "var(--watch)" : "var(--soft)" }}>{m?.clear ?? 0}</b></div>
+              <DualBar a={m?.encrypted ?? 0} b={m?.clear ?? 0} ca="var(--safe)" cb="var(--watch)" />
+            </Mtile>
+            <Mtile label="TCP / UDP">
+              <div className="mval"><b>{m?.tcp ?? 0}</b> <span className="sep">/</span> <b>{m?.udp ?? 0}</b></div>
+              <DualBar a={m?.tcp ?? 0} b={m?.udp ?? 0} ca="var(--accent2)" cb="var(--accent)" />
+            </Mtile>
+            <Mtile label="Ports en écoute (exposés)">
+              <div className="mval"><b style={{ color: (m?.listeners_exposed ?? 0) > 0 ? "var(--watch)" : "var(--safe)" }}>{m?.listeners_exposed ?? 0}</b> <span className="sep">/</span> <b>{m?.listeners ?? 0}</b></div>
+              <a style={{ fontSize: 11 }} onClick={() => onGo("carte")}>voir la surface entrante →</a>
+            </Mtile>
+            <Mtile label="Pays distincts">
+              <div className="mval"><b>{m?.countries?.length ?? 0}</b></div>
+              <div className="mlist">{(m?.countries || []).slice(0, 4).map((c: any) => <span key={c.key}>{c.key} <i>{c.count}</i></span>)}{(!m?.countries?.length) && <span className="muted" style={{ fontStyle: "italic" }}>géo hors-ligne</span>}</div>
+            </Mtile>
+            <Mtile label="Top ports distants">
+              <div className="mlist">{(m?.top_ports || []).slice(0, 4).map((p: any) => <span key={p.port}><b style={{ color: p.encrypted ? "var(--safe)" : "var(--watch)" }}>{p.port}</b>{p.service ? ` ${p.service}` : ""} <i>{p.count}</i></span>)}{(!m?.top_ports?.length) && <span className="muted">—</span>}</div>
+            </Mtile>
+          </div>
+        </Card>
 
         <Card title="Connexions — aperçu" right={<a onClick={() => onGo("bouclier")}>{`tout voir (${filtered.length}${allActive ? "" : "/" + conns.length}) →`}</a>}>
           {!allActive && <div className="disc" style={{ padding: "6px 14px 0", color: "var(--accent)" }}>Filtre de sévérité actif (synchronisé avec l'onglet Bouclier).</div>}
@@ -259,10 +301,12 @@ function Dashboard({ conns, exposure, modules, logs, bwHist, scoreHist, top, tra
             vue: (
               <Card title="Vue d'ensemble">
                 <div className="recap"><span className="ic">🛰️</span>Connexions actives<span className="v">{conns.length}</span></div>
-                <div className="recap"><span className="ic">🚨</span>Alertes critiques<span className="v" style={{ color: "var(--crit)" }}>{counts.crit}</span></div>
-                <div className="recap"><span className="ic">⚠️</span>Suspectes<span className="v" style={{ color: "var(--crit)" }}>{counts.suspect}</span></div>
+                <div className="recap"><span className="ic">⬇️</span>Entrantes / sortantes<span className="v"><b style={{ color: "var(--accent)" }}>{m?.inbound ?? 0}</b> / {m?.outbound ?? 0}</span></div>
+                <div className="recap"><span className="ic">🚨</span>Alertes critiques<span className="v" style={{ color: counts.crit ? "var(--crit)" : "var(--faint)" }}>{counts.crit}</span></div>
+                <div className="recap"><span className="ic">⚠️</span>Suspectes<span className="v" style={{ color: counts.suspect ? "var(--crit)" : "var(--faint)" }}>{counts.suspect}</span></div>
                 <div className="recap"><span className="ic">📡</span>Beaconing C2<span className="v" style={{ color: beaconing?.length ? "var(--crit)" : "var(--faint)" }}>{beaconing?.length || 0}</span></div>
-                <div className="recap"><span className="ic">🌐</span>Endpoints distincts<span className="v">{new Set((conns as ScoredConnection[]).map((c) => c.remote_addr)).size}</span></div>
+                <div className="recap"><span className="ic">🚪</span>Ports en écoute exposés<span className="v" style={{ color: (m?.listeners_exposed ?? 0) ? "var(--watch)" : "var(--safe)" }}>{m?.listeners_exposed ?? 0}</span></div>
+                <div className="recap"><span className="ic">🌐</span>Endpoints distincts<span className="v">{m?.endpoints ?? new Set((conns as ScoredConnection[]).map((c) => c.remote_addr)).size}</span></div>
                 <div className="recap"><span className="ic">💾</span>Budget journal<span className="v">≤ 1 Go</span></div>
               </Card>
             ),
@@ -373,14 +417,23 @@ function Bouclier({ conns, active, setActive }: { conns: ScoredConnection[]; act
 }
 
 /* ============ CARTE RÉSEAU ============ */
-function CarteReseau({ conns, trace, traceLabel, onRun, onSelect }: { conns: ScoredConnection[]; trace: TraceResult | null; traceLabel: string; onRun: (t: string) => void; onSelect: (ip: string) => void }) {
+function CarteReseau({ conns, listeners, trace, traceLabel, onRun, onSelect }: { conns: ScoredConnection[]; listeners: import("./api").Listener[]; trace: TraceResult | null; traceLabel: string; onRun: (t: string) => void; onSelect: (ip: string) => void }) {
   const [view, setView] = useState("sortant");
   const [target, setTarget] = useState("1.1.1.1");
   const labels: Record<string, string> = { sortant: "Sortant", entrant: "Entrant", local: "Local (LAN)", tous: "Tous" };
+  const inboundCount = conns.filter((c) => c.direction === "entrant").length;
+  const exposed = listeners.filter((l) => l.exposed);
+  const viewHint: Record<string, string> = {
+    sortant: "Connexions initiées par cette machine vers l'extérieur.",
+    entrant: inboundCount > 0 ? `${inboundCount} connexion(s) entrante(s) active(s) vers un port en écoute.` : "Aucune connexion entrante active — chemin affiché jusqu'à l'IP publique de la box.",
+    local: "Échanges avec les appareils du réseau local (LAN).",
+    tous: "Toutes les connexions actives, entrantes et sortantes.",
+  };
   return (
     <>
-      <Card title="Carte réseau" right={<span className="seg">{Object.keys(labels).map((v) => <button key={v} className={view === v ? "on" : ""} onClick={() => setView(v)}>{labels[v]}</button>)}</span>}>
+      <Card title="Carte réseau" right={<span className="seg">{Object.keys(labels).map((v) => <button key={v} className={view === v ? "on" : ""} onClick={() => setView(v)}>{labels[v]}{v === "entrant" && inboundCount > 0 ? ` (${inboundCount})` : ""}</button>)}</span>}>
         <div className="stage"><NetworkGraph conns={conns} view={view} onSelect={onSelect} trace={trace} /></div>
+        <div className="disc" style={{ paddingBottom: 0 }}>{viewHint[view]}</div>
         <div className="legend">
           <span><span className="d" style={{ background: "var(--accent)" }}></span>Cet appareil</span>
           <span><span className="d" style={{ background: "var(--safe)" }}></span>Sain</span>
@@ -388,6 +441,31 @@ function CarteReseau({ conns, trace, traceLabel, onRun, onSelect }: { conns: Sco
           <span><span className="d" style={{ background: "var(--crit)" }}></span>Suspect / critique</span>
           <span style={{ marginLeft: "auto", color: "var(--faint)" }}>Molette = zoom · glisser = déplacer · survol = détail · Vue : <b style={{ color: "var(--accent)" }}>{labels[view]}</b></span>
         </div>
+      </Card>
+      <div style={{ height: 12 }} />
+      <Card title="Ports en écoute — surface d'exposition entrante" right={<span><b style={{ color: exposed.length ? "var(--watch)" : "var(--safe)" }}>{exposed.length}</b> exposé(s) / {listeners.length}</span>}>
+        <div className="note">Chaque port en écoute est une <b>porte d'entrée potentielle</b>. « Exposé » = lié à <span className="mono">0.0.0.0/::</span> (joignable depuis le réseau) ; « local » = <span className="mono">127.0.0.1</span> (inaccessible de l'extérieur).</div>
+        {listeners.length === 0 ? <div className="empty">Aucun port en écoute détecté.</div> : (
+          <div className="tscroll">
+            <table>
+              <thead><tr><th>Port</th><th>Proto</th><th>Process</th><th>PID</th><th>Liaison</th><th>Exposition</th></tr></thead>
+              <tbody>
+                {[...listeners].sort((a, b) => Number(b.exposed) - Number(a.exposed) || a.port - b.port).map((l, i) => (
+                  <tr key={i}>
+                    <td className="mono" style={{ fontWeight: 700 }}>{l.port}</td>
+                    <td className="mono muted">{l.protocol}</td>
+                    <td><span className="proc">{l.process}</span></td>
+                    <td className="pid mono">{l.pid ?? "—"}</td>
+                    <td className="mono muted">{l.addr}</td>
+                    <td>{l.exposed
+                      ? <span className="sev w"><span className="d"></span>Exposé</span>
+                      : <span className="sev s"><span className="d"></span>Local</span>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Card>
       <div style={{ height: 12 }} />
       <Card title="Tracé de connexion — carte du monde" right={<><div className="search" style={{ marginRight: 8 }}><input value={target} onChange={(e) => setTarget(e.target.value)} style={{ width: 120 }} /></div><button className="btn ghost" onClick={() => onRun(target)}>Lancer le tracé</button></>}>
@@ -850,6 +928,8 @@ export default function App() {
   const connections = usePolling(api.connections, 3000);
   const bandwidth = usePolling(api.bandwidth, 1500);
   const top = usePolling(api.topTalkers, 5000);
+  const metrics = usePolling(api.metrics, 5000);
+  const listeners = usePolling(api.listeners, 8000);
   const logs = usePolling(() => api.logs(), 5000);
   const history = usePolling(api.history, 8000);
   const [traceTarget, setTraceTarget] = useState("1.1.1.1");
@@ -922,9 +1002,9 @@ export default function App() {
         ))}
       </div>
 
-      {tab === "dashboard" && <Dashboard conns={conns} exposure={exposure.data} modules={mods} logs={logs.data || []} bwHist={bwHist} scoreHist={scoreHist} top={top.data || []} trace={trace.data} beaconing={beaconing.data || []} sevFilter={sevFilter} onGo={setTab} onSelect={selectEndpoint} />}
+      {tab === "dashboard" && <Dashboard conns={conns} exposure={exposure.data} metrics={metrics.data} modules={mods} logs={logs.data || []} bwHist={bwHist} scoreHist={scoreHist} top={top.data || []} trace={trace.data} beaconing={beaconing.data || []} sevFilter={sevFilter} onGo={setTab} onSelect={selectEndpoint} />}
       {tab === "bouclier" && <Bouclier conns={conns} active={sevFilter} setActive={setSevFilter} />}
-      {tab === "carte" && <CarteReseau conns={conns} trace={trace.data} traceLabel={traceLabel} onRun={runTrace} onSelect={selectEndpoint} />}
+      {tab === "carte" && <CarteReseau conns={conns} listeners={listeners.data || []} trace={trace.data} traceLabel={traceLabel} onRun={runTrace} onSelect={selectEndpoint} />}
       {tab === "remediation" && <Remediation conns={conns} />}
       {tab === "recon" && <Recon wifi={wifi.data} lan={lan.data} scan={scan.data} onScan={(t, m) => api.scanRun(t, m)} />}
       {tab === "offensif" && <Offensif airgapped={airgapped} />}

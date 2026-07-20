@@ -15,6 +15,10 @@ def build_markdown(summary, scored) -> str:
         f"- **Score d'exposition** : {summary.score}/100 ({summary.band})",
         f"- Connexions analysées : {summary.total}",
         (
+            f"- Sens : {sum(1 for s in scored if s.direction == 'entrant')} entrante(s) · "
+            f"{sum(1 for s in scored if s.direction == 'sortant')} sortante(s)"
+        ),
+        (
             f"- Répartition : {summary.counts.get('safe', 0)} saines · "
             f"{summary.counts.get('watch', 0)} à surveiller · "
             f"{summary.counts.get('suspect', 0)} suspectes · "
