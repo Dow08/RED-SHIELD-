@@ -255,3 +255,8 @@ tbody tr { transition: background 0.12s ease; }
 /* Champs de saisie : focus accentué */
 input.key:focus, .search input:focus, textarea:focus { border-color: var(--accent); }
 .search:focus-within { border-color: var(--accent); }
+
+/* Rangées denses : descriptions qui débordent proprement + états vides aérés */
+.row .ds { min-width: 0; overflow-wrap: anywhere; }
+.empty { line-height: 1.6; }
+.note { line-height: 1.55; }

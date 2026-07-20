@@ -278,6 +278,7 @@ function Bouclier({ conns }: { conns: ScoredConnection[] }) {
 
   return (
     <Card title="Connexions actives" right={`${list.length}/${conns.length} · temps réel`}>
+      <div className="note">Connexions de ta machine, notées en temps réel (process → destination, risque, MITRE). Filtre, trie, exporte le rapport ; la coupure se fait depuis <b>Remédiation</b>.</div>
       <div className="toolbar">
         <div className="dd">
           <button className="dd-btn" onClick={() => setDdOpen((o) => !o)}>▾ Filtres</button>
@@ -384,7 +385,8 @@ function Remediation({ conns }: { conns: ScoredConnection[] }) {
   const risky = conns.filter((c) => c.severity === "suspect" || c.severity === "crit").sort((a, b) => b.risk - a.risk);
   return (
     <Card title="Remédiation — diagnostic approfondi" right={`${risky.length} à traiter`}>
-      {risky.length === 0 && <div className="empty">Aucune connexion suspecte au moment de l'analyse. Ta machine est saine ✅</div>}
+      <div className="note">Connexions suspectes à investiguer : arbre de processus, techniques <b>MITRE ATT&amp;CK</b>, réputation threat-intel et action de coupure (dry-run + confirmation).</div>
+      {risky.length === 0 && <div className="empty">✅ Aucune connexion suspecte au moment de l'analyse — ta machine est saine.</div>}
       {risky.map((c, i) => (
         <div className="rcard" key={i}>
           <div className="rhead">
@@ -872,7 +874,7 @@ export default function App() {
       {tab === "connecteurs" && <Connecteurs airgapped={airgapped} connectors={connectors.data || []} onRefresh={() => api.connectors().then((d) => (connectors.data = d)).catch(() => {})} />}
       {tab === "diagnostic" && <Diagnostic logs={logs.data || []} history={history.data || []} timeline={timeline.data || []} beaconing={beaconing.data || []} />}
 
-      <div className="foot">RED Shield · Jalon 1 · style mix moderne · données réelles (aucune inventée)</div>
+      <div className="foot">RED · Network Shield &amp; Recon · analyses 100 % locales, données réelles (aucune inventée)</div>
     </div>
   );
 }
