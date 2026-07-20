@@ -61,25 +61,55 @@ def test_shield_metrics_geo_injected():
         assert any(c.key == "Testland" for c in m.countries)
 
 
-def test_direction_classification_logic():
-    """Une connexion vers un port local en écoute est classée entrante."""
+class _Addr:
+    def __init__(self, ip, port):
+        self.ip, self.port = ip, port
+
+
+class _Conn:
+    def __init__(self, laddr, raddr, status, ctype):
+        self.laddr, self.raddr, self.status = laddr, raddr, status
+        self.type, self.pid = ctype, None
+
+
+def _fake_raw():
+    import socket as _s
+    import psutil as _p
+    return [
+        _Conn(_Addr("0.0.0.0", 8080), None, _p.CONN_LISTEN, _s.SOCK_STREAM),           # écoute exposée
+        _Conn(_Addr("127.0.0.1", 5000), None, _p.CONN_LISTEN, _s.SOCK_STREAM),         # écoute locale
+        _Conn(_Addr("192.168.1.10", 8080), _Addr("203.0.113.5", 55000), "ESTABLISHED", _s.SOCK_STREAM),   # ENTRANT (vers 8080 en écoute)
+        _Conn(_Addr("192.168.1.10", 49500), _Addr("140.82.121.4", 443), "ESTABLISHED", _s.SOCK_STREAM),   # sortant chiffré
+        _Conn(_Addr("192.168.1.10", 49600), _Addr("93.184.216.34", 80), "ESTABLISHED", _s.SOCK_STREAM),   # sortant clair
+        _Conn(_Addr("127.0.0.1", 49700), _Addr("127.0.0.1", 9000), "ESTABLISHED", _s.SOCK_STREAM),        # loopback (ignoré)
+    ]
+
+
+def test_direction_and_metrics_deterministic(monkeypatch):
+    """psutil simulé : classification entrant/sortant + métriques exactes."""
+    import psutil
+    monkeypatch.setattr(psutil, "net_connections", lambda kind="inet": _fake_raw())
     mod = ShieldModule(EventBus())
 
-    class _Addr:
-        def __init__(self, ip, port):
-            self.ip, self.port = ip, port
+    conns = mod.get_connections(resolve_dns=False)
+    assert len(conns) == 3  # 3 établies non-loopback (le loopback est exclu)
+    by_remote = {c.remote_addr: c for c in conns}
+    assert by_remote["203.0.113.5"].direction == "entrant"
+    assert by_remote["140.82.121.4"].direction == "sortant"
+    assert by_remote["93.184.216.34"].direction == "sortant"
 
-    class _Conn:
-        def __init__(self, laddr, raddr, status):
-            self.laddr, self.raddr, self.status = laddr, raddr, status
+    listeners = mod.get_listeners()
+    assert {(l.port, l.exposed) for l in listeners} == {(8080, True), (5000, False)}
 
-    raw = [
-        _Conn(_Addr("0.0.0.0", 8080), None, __import__("psutil").CONN_LISTEN),
-        _Conn(_Addr("192.168.1.10", 8080), _Addr("203.0.113.5", 55000), "ESTABLISHED"),  # entrant
-        _Conn(_Addr("192.168.1.10", 49500), _Addr("140.82.121.4", 443), "ESTABLISHED"),  # sortant
-    ]
-    ports = mod._listen_ports(raw)
-    assert 8080 in ports
+    m = mod.metrics(geo=lambda ip: {"country": "US"})
+    assert m.total == 3 and m.inbound == 1 and m.outbound == 2
+    assert m.encrypted == 1 and m.clear == 2       # 443 chiffré ; 80 + 55000 clairs
+    assert m.listeners == 2 and m.listeners_exposed == 1
+    assert m.endpoints == 3
+    assert any(c.key == "US" and c.count == 3 for c in m.countries)
+    top = {pc.port: pc for pc in m.top_ports}
+    assert top[443].encrypted is True and top[443].service == "https"
+    assert top[80].encrypted is False
 
 
 def test_bandwidth_rates_shape():
