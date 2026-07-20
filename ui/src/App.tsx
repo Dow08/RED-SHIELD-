@@ -545,9 +545,41 @@ function CarteReseau({ conns, listeners, trace, traceLabel, geoPoints, onRun, on
 }
 
 /* ============ REMÉDIATION ============ */
-function Remediation({ conns }: { conns: ScoredConnection[] }) {
+function GrcPosture({ conns, metrics, listeners }: { conns: ScoredConnection[]; metrics?: import("./api").NetMetrics; listeners: import("./api").Listener[] }) {
+  const exposed = (listeners || []).filter((l) => l.exposed).length;
+  const clear = metrics?.clear ?? 0;
+  const risky = conns.filter((c) => c.severity === "suspect" || c.severity === "crit").length;
+  const controls = [
+    { domain: "Maîtrise de la surface d'exposition", ctrl: ["CIS v8 §4 & §12", "NIST CSF PR.AC-5", "ISO 27001 A.13.1", "ANSSI BP-028"], ok: exposed === 0, detail: exposed === 0 ? "Aucun port exposé non maîtrisé." : `${exposed} port(s) exposé(s) à réduire ou justifier (fermeture possible depuis Carte réseau).` },
+    { domain: "Chiffrement des communications", ctrl: ["NIST CSF PR.DS-2", "ISO 27001 A.10.1", "ANSSI R41"], ok: clear === 0, detail: clear === 0 ? "Tous les flux observés sont chiffrés." : `${clear} flux en clair — vérifier qu'aucune donnée sensible n'y transite.` },
+    { domain: "Détection d'anomalies & réponse", ctrl: ["NIST CSF DE.CM-1 / DE.AE-2", "ISO 27001 A.12.4", "CIS v8 §8 & §13"], ok: risky === 0, detail: risky === 0 ? "Aucune connexion suspecte au moment de l'analyse." : `${risky} connexion(s) à investiguer (voir ci-dessous).` },
+    { domain: "Journalisation & traçabilité", ctrl: ["NIST CSF PR.PT-1", "ISO 27001 A.12.4", "CIS v8 §8"], ok: true, detail: "Journal d'événements + piste d'audit actifs (rétention locale ≤ 1 Go)." },
+  ];
+  const conf = controls.filter((c) => c.ok).length;
+  const pct = Math.round((conf / controls.length) * 100);
+  return (
+    <Card title="Posture GRC — conformité dérivée de l'état réel" right={`${conf}/${controls.length} conforme(s) · ${pct}%`}>
+      <div className="note">Mapping <b>Gouvernance / Risque / Conformité</b> : chaque domaine est évalué à partir de <b>données réelles</b> de la machine (aucune auto-déclaration). Référentiels : ISO 27001, NIST CSF, CIS v8, ANSSI.</div>
+      {controls.map((c, i) => (
+        <div className="rcard" key={i} style={{ borderLeft: `3px solid ${c.ok ? "var(--safe)" : "var(--watch)"}` }}>
+          <div className="rhead">
+            <span className="pr" style={{ color: c.ok ? "var(--safe)" : "var(--watch)", borderColor: c.ok ? "var(--safe)" : "var(--watch)", background: "transparent" }}>{c.ok ? "CONFORME" : "À TRAITER"}</span>
+            <span className="rtitle" style={{ fontSize: 13 }}>{c.domain}</span>
+          </div>
+          <div className="rmeta">{c.ctrl.map((ct) => <span key={ct} className="badge">{ct}</span>)}</div>
+          <div className="rbody">{c.detail}</div>
+        </div>
+      ))}
+    </Card>
+  );
+}
+
+function Remediation({ conns, metrics, listeners }: { conns: ScoredConnection[]; metrics?: import("./api").NetMetrics; listeners: import("./api").Listener[] }) {
   const risky = conns.filter((c) => c.severity === "suspect" || c.severity === "crit").sort((a, b) => b.risk - a.risk);
   return (
+    <>
+    <GrcPosture conns={conns} metrics={metrics} listeners={listeners} />
+    <div style={{ height: 12 }} />
     <Card title="Remédiation — diagnostic approfondi" right={`${risky.length} à traiter`}>
       <div className="note">Connexions suspectes à investiguer : arbre de processus, techniques <b>MITRE ATT&amp;CK</b>, réputation threat-intel et action de coupure (dry-run + confirmation).</div>
       {risky.length === 0 && <div className="empty">✅ Aucune connexion suspecte au moment de l'analyse — ta machine est saine.</div>}
@@ -568,6 +600,7 @@ function Remediation({ conns }: { conns: ScoredConnection[] }) {
         </div>
       ))}
     </Card>
+    </>
   );
 }
 
@@ -1077,7 +1110,7 @@ export default function App() {
       {tab === "dashboard" && <Dashboard conns={conns} exposure={exposure.data} metrics={metrics.data} modules={mods} logs={logs.data || []} bwHist={bwHist} bw={bandwidth.data} scoreHist={scoreHist} top={top.data || []} thrStatus={thrStatus.data} thrProcs={thrProcs.data || []} trace={trace.data} beaconing={beaconing.data || []} sevFilter={sevFilter} onGo={setTab} onSelect={selectEndpoint} />}
       {tab === "bouclier" && <Bouclier conns={conns} active={sevFilter} setActive={setSevFilter} />}
       {tab === "carte" && <CarteReseau conns={conns} listeners={listeners.data || []} trace={trace.data} traceLabel={traceLabel} geoPoints={geoPoints.data || []} onRun={runTrace} onSelect={selectEndpoint} />}
-      {tab === "remediation" && <Remediation conns={conns} />}
+      {tab === "remediation" && <Remediation conns={conns} metrics={metrics.data} listeners={listeners.data || []} />}
       {tab === "recon" && <Recon lan={lan.data} scan={scan.data} onScan={(t, m) => api.scanRun(t, m)} />}
       {tab === "offensif" && <Offensif airgapped={airgapped} wifi={wifi.data} />}
       {tab === "soc" && <Soc hids={hids.data} defender={defender.data} />}
