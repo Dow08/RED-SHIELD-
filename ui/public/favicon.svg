@@ -1,29 +1,19 @@
-<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" fill="none">
+<svg viewBox="0 0 128 142" xmlns="http://www.w3.org/2000/svg" fill="none">
   <defs>
-    <linearGradient id="rsg" x1="4" y1="2" x2="44" y2="46" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#2fe0d0"/>
-      <stop offset="1" stop-color="#7c9cff"/>
+    <linearGradient id="b" x1="20" y1="6" x2="108" y2="132" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#233a5c"/><stop offset="1" stop-color="#0a1526"/>
+    </linearGradient>
+    <linearGradient id="r" x1="20" y1="6" x2="108" y2="130" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffd7a8"/><stop offset=".45" stop-color="#ff7a2f"/><stop offset="1" stop-color="#b83512"/>
+    </linearGradient>
+    <linearGradient id="c" x1="42" y1="52" x2="86" y2="92" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff2e6"/><stop offset="1" stop-color="#ff9a4d"/>
+    </linearGradient>
+    <linearGradient id="g" x1="40" y1="8" x2="58" y2="80" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffffff" stop-opacity=".6"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
     </linearGradient>
   </defs>
-  <!-- bouclier -->
-  <path d="M24 2.5 L41.5 8.5 V22.5 C41.5 34 33.5 41.5 24 46 C14.5 41.5 6.5 34 6.5 22.5 V8.5 Z"
-        fill="#070c12" stroke="url(#rsg)" stroke-width="2"/>
-  <!-- arcs radar -->
-  <g stroke="url(#rsg)" stroke-width="1.1" opacity="0.5">
-    <circle cx="24" cy="23" r="6.5"/>
-    <circle cx="24" cy="23" r="11"/>
-  </g>
-  <!-- liens réseau surveillés -->
-  <g stroke-width="1.4" opacity="0.95">
-    <line x1="24" y1="23" x2="24" y2="11.5" stroke="#7c9cff"/>
-    <line x1="24" y1="23" x2="33.5" y2="28.5" stroke="#2fe0d0"/>
-    <line x1="24" y1="23" x2="15" y2="29.5" stroke="#fb5b6b"/>
-  </g>
-  <!-- noeuds (un rouge = menace détectée) -->
-  <circle cx="24" cy="23" r="2.6" fill="#2fe0d0"/>
-  <circle cx="24" cy="11.5" r="1.7" fill="#7c9cff"/>
-  <circle cx="33.5" cy="28.5" r="1.7" fill="#2fe0d0"/>
-  <circle cx="15" cy="29.5" r="1.9" fill="#fb5b6b"/>
-  <!-- ligne de scan -->
-  <path d="M8.5 19.5 H39.5" stroke="url(#rsg)" stroke-width="0.9" opacity="0.28"/>
+  <path d="M64 6 112 24V62c0 34-20 58-48 72C36 120 16 96 16 62V24Z" fill="url(#b)" stroke="url(#r)" stroke-width="4"/>
+  <path d="M64 8 24 23v20c0 15 5 27 13 37 6-8 9-18 9-31V19Z" fill="url(#g)"/>
+  <path d="M44 64 58 79 88 46" stroke="url(#c)" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

@@ -7,6 +7,91 @@ function cvar(name: string, fallback: string): string {
 }
 const reduceMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+function hexToRgb(h: string): [number, number, number] {
+  const s = h.replace("#", "").trim();
+  const v = s.length === 3 ? s.split("").map((c) => c + c).join("") : s;
+  const n = parseInt(v.slice(0, 6) || "22d3ee", 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+/** Fond « cyber-interface » animé : réseau de nœuds lumineux (canvas) sous les
+ *  couches CSS (maille, radar, scan, halos). Les couleurs sont relues à chaque
+ *  frame depuis les variables de thème, donc le fond se recolore avec le thème. */
+export function CyberBackground() {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const cv = ref.current;
+    if (!cv) return;
+    const ctx = cv.getContext("2d");
+    if (!ctx) return;
+    let W = 0, H = 0, raf = 0;
+    let pts: { x: number; y: number; vx: number; vy: number; k: "c" | "o" | "d"; r: number }[] = [];
+    const reduce = reduceMotion();
+    const build = () => {
+      const n = Math.round(Math.min(120, (W * H) / 15000));
+      pts = [];
+      for (let i = 0; i < n; i++) {
+        const k: "c" | "o" | "d" = i < 2 ? "d" : i % 6 === 0 ? "o" : "c";
+        pts.push({ x: Math.random() * W, y: Math.random() * H, vx: (Math.random() - 0.5) * 0.28, vy: (Math.random() - 0.5) * 0.28, k, r: k === "d" ? 3.2 : k === "o" ? 2.6 : 1.9 });
+      }
+    };
+    const size = () => {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      W = cv.clientWidth; H = cv.clientHeight;
+      cv.width = W * dpr; cv.height = H * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      build();
+    };
+    const step = () => {
+      const cyan = hexToRgb(cvar("--accent2", "#22d3ee"));
+      const orange = hexToRgb(cvar("--accent", "#ff7a2f"));
+      const red = hexToRgb(cvar("--crit", "#ff5470"));
+      const col = { c: cyan, o: orange, d: red };
+      ctx.clearRect(0, 0, W, H);
+      for (const p of pts) {
+        p.x += p.vx; p.y += p.vy;
+        if (p.x < 0 || p.x > W) p.vx *= -1;
+        if (p.y < 0 || p.y > H) p.vy *= -1;
+      }
+      const [lr, lg, lb] = cyan;
+      ctx.lineWidth = 1;
+      for (let i = 0; i < pts.length; i++) {
+        for (let j = i + 1; j < pts.length; j++) {
+          const a = pts[i], b = pts[j];
+          const d = Math.hypot(a.x - b.x, a.y - b.y);
+          if (d < 150) {
+            ctx.strokeStyle = `rgba(${lr},${lg},${lb},${((1 - d / 150) * 0.42).toFixed(3)})`;
+            ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+          }
+        }
+      }
+      for (const p of pts) {
+        const [r, g, b] = col[p.k];
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 6.2832);
+        ctx.fillStyle = `rgba(${r},${g},${b},0.95)`;
+        ctx.shadowColor = `rgba(${r},${g},${b},0.9)`;
+        ctx.shadowBlur = p.k === "c" ? 6 : 12;
+        ctx.fill();
+      }
+      ctx.shadowBlur = 0;
+      if (!reduce) raf = requestAnimationFrame(step);
+    };
+    size();
+    window.addEventListener("resize", size);
+    step();
+    return () => { window.removeEventListener("resize", size); cancelAnimationFrame(raf); };
+  }, []);
+  return (
+    <div className="cyberbg" aria-hidden>
+      <canvas ref={ref} className="cyber-net" />
+      <div className="cyber-mesh" />
+      <div className="cyber-radar" />
+      <div className="cyber-scan" />
+      <div className="cyber-glow" />
+    </div>
+  );
+}
+
 function fitCanvas(cv: HTMLCanvasElement, ctx: CanvasRenderingContext2D, W: number, H: number) {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const cw = cv.clientWidth || W;

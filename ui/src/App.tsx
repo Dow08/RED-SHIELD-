@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
 import type { Beacon, ConnectorStatus, CrackResult, HidsResult, IntelResult, LanDevice, LlmResult, MailAnalysis, OsintResult, ScanResult, ScoredConnection, Severity, TimelineEvent, TraceResult, WifiNet } from "./api";
 import { usePolling } from "./hooks";
-import { BandwidthChart, NetworkGraph, Sparkline, TraceMap } from "./viz";
+import { BandwidthChart, CyberBackground, NetworkGraph, Sparkline, TraceMap } from "./viz";
 
 const SEV_META: Record<Severity, { c: string; l: string }> = {
   safe: { c: "s", l: "Sain" },
@@ -15,13 +15,14 @@ const bandLabel = (band: string) => (band === "critique" ? "Exposition critique"
 const fr = (n: number) => n.toFixed(1).replace(".", ",");
 
 const THEMES: [string, string, string][] = [
-  ["mix", "Teal (défaut)", "#2fe0d0"],
+  ["command", "Command Grid", "#ff7a2f"],
+  ["mix", "Teal", "#2fe0d0"],
   ["aurora", "Aurora", "#a78bfa"],
   ["signal", "Signal", "#c5f82a"],
   ["holo", "Holo HUD", "#35e6e0"],
 ];
 function ThemeSelector() {
-  const [theme, setTheme] = useState<string>(() => localStorage.getItem("red-theme") || "mix");
+  const [theme, setTheme] = useState<string>(() => localStorage.getItem("red-theme") || "command");
   const [open, setOpen] = useState(false);
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
@@ -882,23 +883,22 @@ export default function App() {
   const offline = connections.error && !connections.data;
 
   return (
+    <>
+    <CyberBackground />
     <div className="wrap">
       <div className="top">
         <div className="brand">
-          <div className="logo" aria-hidden style={{ background: "transparent", boxShadow: "none", width: 40, height: 40 }}>
-            <svg viewBox="0 0 48 48" width="40" height="40" fill="none">
+          <div className="logo" aria-hidden style={{ background: "transparent", boxShadow: "none", width: 46, height: 52 }}>
+            <svg viewBox="0 0 128 142" width="46" height="52" fill="none" style={{ filter: "drop-shadow(0 4px 12px rgba(255,122,47,.5))" }}>
               <defs>
-                <linearGradient id="rslogo" x1="4" y1="2" x2="44" y2="46" gradientUnits="userSpaceOnUse">
-                  <stop offset="0" stopColor="#2fe0d0" /><stop offset="1" stopColor="#7c9cff" />
-                </linearGradient>
+                <linearGradient id="rsBody" x1="20" y1="6" x2="108" y2="132" gradientUnits="userSpaceOnUse"><stop stopColor="#233a5c" /><stop offset="1" stopColor="#0a1526" /></linearGradient>
+                <linearGradient id="rsRim" x1="20" y1="6" x2="108" y2="130" gradientUnits="userSpaceOnUse"><stop stopColor="#ffd7a8" /><stop offset="0.45" stopColor="#ff7a2f" /><stop offset="1" stopColor="#b83512" /></linearGradient>
+                <linearGradient id="rsChk" x1="42" y1="52" x2="86" y2="92" gradientUnits="userSpaceOnUse"><stop stopColor="#fff2e6" /><stop offset="1" stopColor="#ff9a4d" /></linearGradient>
+                <linearGradient id="rsGloss" x1="40" y1="8" x2="58" y2="80" gradientUnits="userSpaceOnUse"><stop stopColor="#ffffff" stopOpacity="0.6" /><stop offset="1" stopColor="#ffffff" stopOpacity="0" /></linearGradient>
               </defs>
-              <path d="M24 2.5 L41.5 8.5 V22.5 C41.5 34 33.5 41.5 24 46 C14.5 41.5 6.5 34 6.5 22.5 V8.5 Z" fill="#070c12" stroke="url(#rslogo)" strokeWidth="2" />
-              <g stroke="url(#rslogo)" strokeWidth="1.1" opacity="0.5"><circle cx="24" cy="23" r="6.5" /><circle cx="24" cy="23" r="11" /></g>
-              <g strokeWidth="1.4" opacity="0.95">
-                <line x1="24" y1="23" x2="24" y2="11.5" stroke="#7c9cff" /><line x1="24" y1="23" x2="33.5" y2="28.5" stroke="#2fe0d0" /><line x1="24" y1="23" x2="15" y2="29.5" stroke="#fb5b6b" />
-              </g>
-              <circle cx="24" cy="23" r="2.6" fill="#2fe0d0" /><circle cx="24" cy="11.5" r="1.7" fill="#7c9cff" /><circle cx="33.5" cy="28.5" r="1.7" fill="#2fe0d0" /><circle cx="15" cy="29.5" r="1.9" fill="#fb5b6b" />
-              <path d="M8.5 19.5 H39.5" stroke="url(#rslogo)" strokeWidth="0.9" opacity="0.28" />
+              <path d="M64 6 112 24V62c0 34-20 58-48 72C36 120 16 96 16 62V24Z" fill="url(#rsBody)" stroke="url(#rsRim)" strokeWidth="4" />
+              <path d="M64 8 24 23v20c0 15 5 27 13 37 6-8 9-18 9-31V19Z" fill="url(#rsGloss)" />
+              <path d="M44 64 58 79 88 46" stroke="url(#rsChk)" strokeWidth="11" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </div>
           <div><h1>RED <span style={{ color: "var(--accent)" }}>SHIELD</span></h1><div className="sub">Network Shield &amp; Recon</div></div>
@@ -949,5 +949,6 @@ export default function App() {
         </div>
       )}
     </div>
+    </>
   );
 }
