@@ -405,6 +405,23 @@ function Remediation({ conns }: { conns: ScoredConnection[] }) {
   );
 }
 
+function AiAnalyzeButton({ getText, kind, label }: { getText: () => string; kind: string; label?: string }) {
+  const [res, setRes] = useState<LlmResult | null>(null);
+  const [busy, setBusy] = useState(false);
+  const run = async () => {
+    setBusy(true); setRes(null);
+    try { setRes(await api.llmAnalyze(getText(), kind)); } catch { setRes({ ok: false, error: "moteur injoignable" }); }
+    setBusy(false);
+  };
+  return (
+    <div style={{ padding: "10px 16px", borderTop: "1px solid var(--card-b)" }}>
+      <button className="btn" onClick={run} disabled={busy}>{busy ? "Analyse IA…" : (label || "🤖 Analyser avec l'IA")}</button>
+      {res && !res.ok && <div className="disc" style={{ paddingTop: 8, color: "var(--watch)" }}>{res.error} — configure le connecteur LLM (Connecteurs).</div>}
+      {res?.ok && <div className="rbody" style={{ whiteSpace: "pre-wrap", marginTop: 8, padding: 12, background: "var(--card-solid)", borderRadius: 8 }}>{res.analysis}</div>}
+    </div>
+  );
+}
+
 function ScanAiButton({ scan }: { scan: ScanResult }) {
   const [res, setRes] = useState<LlmResult | null>(null);
   const [busy, setBusy] = useState(false);
@@ -646,6 +663,13 @@ function Soc({ hids }: { hids: HidsResult | null }) {
               <div className="rbody"><b>Remédiation :</b> {mail.severity === "safe" ? "Aucune anomalie majeure — rester vigilant sur les liens." : "Ne clique aucun lien, n'ouvre aucune pièce jointe, ne réponds pas. Signale/supprime après vérification de l'expéditeur par un autre canal."}</div>
             </div>
           )}
+          {mail && !mail.error && (
+            <AiAnalyzeButton
+              kind="analyse d'un email potentiellement malveillant"
+              label="🤖 Approfondir avec l'IA"
+              getText={() => `Email de "${mail.from_name}" <${mail.from_addr}>, objet "${mail.subject}". Auth: SPF=${mail.spf} DKIM=${mail.dkim} DMARC=${mail.dmarc}. Score ${mail.risk}/100 (${mail.severity}). Anomalies: ${mail.reasons.join(" ; ") || "aucune"}. Liens: ${mail.links.map((l) => l.url).join(", ") || "aucun"}. Pièces jointes: ${mail.attachments.map((a) => a.filename).join(", ") || "aucune"}.`}
+            />
+          )}
         </Card>
       </div>
       <div className="col">
@@ -720,6 +744,7 @@ function Diagnostic({ logs, history, timeline, beaconing }: { logs: any[]; histo
             <div className="log" key={i}><span className="ts">{l.ts.slice(11, 19)}</span><span className={`lv ${l.level}`}>{l.level.slice(0, 4).toUpperCase()}</span><span className="ms">{l.module ? `${l.module}: ` : ""}{l.message}</span></div>
           ))}
           {shown.length === 0 && <div className="empty">Aucun log</div>}
+          {shown.length > 0 && <AiAnalyzeButton kind="journal d'événements/erreurs" label="🤖 Analyser les logs avec l'IA" getText={() => shown.slice(-40).map((l) => `${l.ts.slice(11, 19)} [${l.level}] ${l.module}: ${l.message}`).join("\n")} />}
         </Card>
         <Card title="Timeline des événements" right={`${(timeline || []).length}`}>
           {(timeline || []).slice(0, 40).map((e, i) => (
