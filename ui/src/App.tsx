@@ -867,7 +867,7 @@ function Connecteurs({ airgapped, connectors, onRefresh }: { airgapped: boolean;
 
 /* ============ DIAGNOSTIC ============ */
 const KIND_ICON: Record<string, string> = { nouvelle_connexion: "➕", connexion_fermee: "➖", alerte: "🚨" };
-function Diagnostic({ logs, history, timeline, beaconing }: { logs: any[]; history: any[]; timeline: TimelineEvent[]; beaconing: Beacon[] }) {
+function Diagnostic({ logs, history, timeline, beaconing, config }: { logs: any[]; history: any[]; timeline: TimelineEvent[]; beaconing: Beacon[]; config?: { purge_on_exit: boolean; storage_budget_go: number; sample_interval: number } }) {
   const [level, setLevel] = useState("");
   const shown = level ? logs.filter((l) => l.level === level) : logs;
   return (
@@ -915,10 +915,10 @@ function Diagnostic({ logs, history, timeline, beaconing }: { logs: any[]; histo
           ))}
           {history.length === 0 && <div className="empty">Aucun instantané. Utilise « Enregistrer un instantané » dans Bouclier.</div>}
         </Card>
-        <Card title="Rétention & réglages">
-          <div className="row"><span className="nm">Purge à la fermeture</span><span className="stt on" style={{ marginLeft: "auto" }}>activée</span></div>
-          <div className="row"><span className="nm">Budget stockage</span><span className="stt on" style={{ marginLeft: "auto" }}>≤ 1 Go</span></div>
-          <div className="row"><span className="nm">Rotation automatique</span><span className="stt on" style={{ marginLeft: "auto" }}>activée</span></div>
+        <Card title="Rétention & réglages" right={config ? "lu depuis /config" : "…"}>
+          <div className="row"><span className="nm">Purge à la fermeture</span><span className={`stt ${config?.purge_on_exit ? "on" : "off"}`} style={{ marginLeft: "auto" }}>{config === undefined ? "…" : config.purge_on_exit ? "activée" : "désactivée"}</span></div>
+          <div className="row"><span className="nm">Budget stockage</span><span className="stt on" style={{ marginLeft: "auto" }}>{config === undefined ? "…" : `≤ ${fr(config.storage_budget_go)} Go`}</span></div>
+          <div className="row"><span className="nm">Échantillonnage réseau</span><span className="stt on" style={{ marginLeft: "auto" }}>{config === undefined ? "…" : `${fr(config.sample_interval)} s`}</span></div>
         </Card>
       </div>
     </div>
@@ -963,6 +963,7 @@ export default function App() {
   const scan = usePolling(api.scan, 4000);
   const hids = usePolling(api.hids, 8000);
   const connectors = usePolling(api.connectors, 6000);
+  const config = usePolling(api.config, 15000);
   const [traceLabel, setTraceLabel] = useState("");
   const runTrace = (t: string) => { setTraceTarget(t); api.traceRun(t); };
   const selectEndpoint = (ip: string) => {
@@ -1032,7 +1033,7 @@ export default function App() {
       {tab === "offensif" && <Offensif airgapped={airgapped} />}
       {tab === "soc" && <Soc hids={hids.data} />}
       {tab === "connecteurs" && <Connecteurs airgapped={airgapped} connectors={connectors.data || []} onRefresh={() => api.connectors().then((d) => (connectors.data = d)).catch(() => {})} />}
-      {tab === "diagnostic" && <Diagnostic logs={logs.data || []} history={history.data || []} timeline={timeline.data || []} beaconing={beaconing.data || []} />}
+      {tab === "diagnostic" && <Diagnostic logs={logs.data || []} history={history.data || []} timeline={timeline.data || []} beaconing={beaconing.data || []} config={config.data} />}
 
       <div className="foot">RED SHIELD · Network Shield &amp; Recon · analyses 100 % locales, données réelles (aucune inventée)</div>
 

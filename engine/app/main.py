@@ -119,7 +119,12 @@ def create_app() -> FastAPI:
 
     @app.get("/config")
     def config_get() -> dict:
-        return {"airgapped": runtime.airgapped}
+        return {
+            "airgapped": runtime.airgapped,
+            "purge_on_exit": settings.purge_on_exit,
+            "storage_budget_go": settings.storage_budget_go,
+            "sample_interval": settings.sample_interval,
+        }
 
     @app.post("/config/airgapped")
     def config_airgapped(req: AirgapReq) -> dict:

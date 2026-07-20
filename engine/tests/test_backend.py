@@ -1,5 +1,8 @@
 """Tests Diagnostic, Persistence et rapport Markdown."""
+from fastapi.testclient import TestClient
+
 from app.core.bus import EventBus
+from app.main import create_app
 from app.modules.diagnostic import DiagnosticModule
 from app.modules.persistence import PersistenceModule
 from app.modules.scoring import ScoringModule, ExposureSummary
@@ -45,3 +48,14 @@ def test_markdown_report_contains_findings():
     assert "Score d'exposition" in md
     assert "wscript.exe" in md
     assert "TA0011" in md
+
+
+def test_config_exposes_real_retention_settings():
+    """La carte « Rétention » lit /config : les vrais réglages doivent y être."""
+    app = create_app()
+    with TestClient(app) as client:
+        cfg = client.get("/config").json()
+        assert set(cfg) >= {"airgapped", "purge_on_exit", "storage_budget_go", "sample_interval"}
+        assert isinstance(cfg["purge_on_exit"], bool)
+        assert cfg["storage_budget_go"] > 0
+        assert cfg["sample_interval"] > 0
