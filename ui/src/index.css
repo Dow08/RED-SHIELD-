@@ -220,6 +220,16 @@ input.key { background: var(--card-solid); border: 1px solid var(--card-b); bord
 .mtile .mlist { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--soft); }
 .mtile .mlist span { display: flex; align-items: baseline; gap: 6px; }
 .mtile .mlist i { margin-left: auto; font-style: normal; font-family: var(--mono); color: var(--faint); font-size: 11px; }
+.mtile.expandable { cursor: pointer; }
+.mtile.expandable:hover { border-color: rgba(255, 122, 47, 0.4); }
+.mtile .lbl .qh { margin-left: 5px; color: var(--accent2); cursor: help; }
+.mtile .lbl .exp { float: right; color: var(--accent); font-size: 11px; }
+.mtile .mdetail { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--hair); display: flex; flex-direction: column; gap: 8px; cursor: default; }
+.mtile .mdrow { display: flex; gap: 8px; align-items: flex-start; }
+.mtile .mdrow .mdk { font-family: var(--mono); font-size: 10px; color: var(--faint); min-width: 30px; padding-top: 3px; }
+.mtile .pchips { display: flex; flex-wrap: wrap; gap: 5px; }
+.mtile .pchip { font-size: 11px; color: var(--soft); background: var(--card); border: 1px solid var(--hair); border-radius: 6px; padding: 2px 7px; white-space: nowrap; }
+.mtile .pchip i { font-style: normal; color: var(--faint); font-size: 10px; }
 
 .stage { position: relative; background: linear-gradient(180deg, #0a0d12, #080a0e); }
 canvas { display: block; width: 100%; height: auto; }
@@ -276,38 +286,7 @@ input.key:focus, .search input:focus, textarea:focus { border-color: var(--accen
 .empty { line-height: 1.6; }
 .note { line-height: 1.55; }
 
-/* ============ Thèmes live (data-theme sur <html>) ============ */
-/* Défaut = "mix" (teal, défini dans :root). Les visualisations lisent --accent
-   à chaque frame et se recolorent donc automatiquement. */
-
-/* Aurora — violet/indigo, glassmorphism */
-:root[data-theme="aurora"] { --bg: #0a0912; --accent: #a78bfa; --accent2: #22d3ee; --card-b: rgba(167, 139, 250, 0.16); }
-:root[data-theme="aurora"] body::before {
-  background:
-    radial-gradient(620px 420px at 12% 16%, rgba(124, 58, 237, 0.28), transparent 60%),
-    radial-gradient(560px 380px at 88% 12%, rgba(37, 99, 235, 0.22), transparent 60%),
-    radial-gradient(620px 440px at 78% 92%, rgba(219, 39, 119, 0.18), transparent 60%),
-    radial-gradient(520px 380px at 18% 96%, rgba(34, 211, 238, 0.16), transparent 60%);
-  filter: blur(34px);
-}
-
-/* Signal — bento plat, vert acide, sans flou ni orbes */
-:root[data-theme="signal"] { --bg: #050506; --accent: #c5f82a; --accent2: #c5f82a; --card: #0e0f11; --card-solid: #0e0f11; --card-b: #1b1d21; --blur: 0px; --radius: 12px; --shadow: none; }
-:root[data-theme="signal"] body::before { opacity: 0; }
-:root[data-theme="signal"] .card::before, :root[data-theme="signal"] .card::after { opacity: 0.3; }
-
-/* Holo — HUD cyan, équerres marquées */
-:root[data-theme="holo"] { --bg: #04080b; --accent: #35e6e0; --accent2: #35e6e0; --card: rgba(20, 40, 44, 0.28); --card-b: rgba(53, 230, 224, 0.28); }
-:root[data-theme="holo"] body::before {
-  background:
-    radial-gradient(620px 420px at 15% 16%, rgba(53, 230, 224, 0.16), transparent 60%),
-    radial-gradient(560px 380px at 85% 12%, rgba(20, 120, 130, 0.18), transparent 60%),
-    radial-gradient(620px 440px at 78% 92%, rgba(53, 230, 224, 0.12), transparent 60%);
-  filter: blur(30px);
-}
-:root[data-theme="holo"] .card::before, :root[data-theme="holo"] .card::after { opacity: 0.7; width: 12px; height: 12px; }
-
-/* ============ Command Grid — SOC war-room (défaut) ============ */
+/* ============ Command Grid — thème unique (data-theme sur <html>) ============ */
 /* Orange = alerte, cyan = données, fond navy profond. */
 :root[data-theme="command"] {
   --bg: #050b16;

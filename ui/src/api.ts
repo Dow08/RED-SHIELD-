@@ -32,6 +32,7 @@ export interface NetMetrics {
   encrypted: number; clear: number; endpoints: number;
   listeners: number; listeners_exposed: number;
   countries: KeyCount[]; top_ports: PortCount[];
+  tcp_ports: PortCount[]; udp_ports: PortCount[];
 }
 
 export interface Exposure {

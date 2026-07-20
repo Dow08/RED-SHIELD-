@@ -14,44 +14,6 @@ const bandColor = (band: string) => (band === "critique" ? "var(--crit)" : band 
 const bandLabel = (band: string) => (band === "critique" ? "Exposition critique" : band === "elevee" ? "Exposition élevée" : "Exposition faible");
 const fr = (n: number) => n.toFixed(1).replace(".", ",");
 
-const THEMES: [string, string, string][] = [
-  ["command", "Command Grid", "#ff7a2f"],
-  ["mix", "Teal", "#2fe0d0"],
-  ["aurora", "Aurora", "#a78bfa"],
-  ["signal", "Signal", "#c5f82a"],
-  ["holo", "Holo HUD", "#35e6e0"],
-];
-function ThemeSelector() {
-  const [theme, setTheme] = useState<string>(() => localStorage.getItem("red-theme") || "command");
-  const [open, setOpen] = useState(false);
-  useEffect(() => {
-    document.documentElement.setAttribute("data-theme", theme);
-    localStorage.setItem("red-theme", theme);
-  }, [theme]);
-  useEffect(() => {
-    const close = () => setOpen(false);
-    if (open) { document.addEventListener("click", close); return () => document.removeEventListener("click", close); }
-  }, [open]);
-  const cur = THEMES.find((t) => t[0] === theme) || THEMES[0];
-  return (
-    <div className="dd" onClick={(e) => e.stopPropagation()}>
-      <button className="pill" style={{ cursor: "pointer" }} onClick={() => setOpen((o) => !o)} title="Changer de thème (en direct)">
-        <span className="on" style={{ background: cur[2], boxShadow: `0 0 8px ${cur[2]}` }}></span>Thème <b style={{ color: "var(--ink)" }}>{cur[1].split(" ")[0]}</b>
-      </button>
-      {open && (
-        <div className="dd-panel" style={{ right: 0, left: "auto" }}>
-          <div className="dd-grp">Thème (live)</div>
-          {THEMES.map(([id, label, color]) => (
-            <div className="dd-item" key={id} onClick={() => { setTheme(id); setOpen(false); }}>
-              <span className="d" style={{ background: color, boxShadow: `0 0 6px ${color}` }}></span>{label}{theme === id ? " ✓" : ""}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function Card({ title, right, children, className }: { title: string; right?: React.ReactNode; children: React.ReactNode; className?: string }) {
   const [collapsed, setCollapsed] = useState(false);
   return (
@@ -170,8 +132,19 @@ function DualBar({ a, b, ca, cb }: { a: number; b: number; ca: string; cb: strin
     </span>
   );
 }
-function Mtile({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div className="mtile"><div className="lbl">{label}</div>{children}</div>;
+function Mtile({ label, hint, children, detail }: { label: string; hint?: string; children: React.ReactNode; detail?: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className={`mtile${detail ? " expandable" : ""}`} onClick={detail ? () => setOpen((o) => !o) : undefined} title={hint}>
+      <div className="lbl">{label}{hint && <span className="qh">ⓘ</span>}{detail && <span className="exp">{open ? "▾" : "▸"}</span>}</div>
+      {children}
+      {detail && open && <div className="mdetail" onClick={(e) => e.stopPropagation()}>{detail}</div>}
+    </div>
+  );
+}
+function PortChips({ ports }: { ports: import("./api").PortCount[] }) {
+  if (!ports || ports.length === 0) return <span className="muted" style={{ fontSize: 11 }}>aucun</span>;
+  return <>{ports.map((p) => <span key={p.port} className="pchip"><b style={{ color: p.encrypted ? "var(--safe)" : "var(--watch)" }}>{p.port}</b>{p.service ? " " + p.service : ""} <i>{p.count}</i></span>)}</>;
 }
 function Dashboard({ conns, exposure, metrics, modules, logs, bwHist, scoreHist, top, thrStatus, thrProcs, trace, beaconing, sevFilter, onGo, onSelect }: any) {
   const m = metrics as import("./api").NetMetrics | undefined;
@@ -254,7 +227,12 @@ function Dashboard({ conns, exposure, metrics, modules, logs, bwHist, scoreHist,
               <div className="mval"><b style={{ color: "var(--safe)" }}>{m?.encrypted ?? 0}</b> <span className="sep">/</span> <b style={{ color: (m?.clear ?? 0) > 0 ? "var(--watch)" : "var(--soft)" }}>{m?.clear ?? 0}</b></div>
               <DualBar a={m?.encrypted ?? 0} b={m?.clear ?? 0} ca="var(--safe)" cb="var(--watch)" />
             </Mtile>
-            <Mtile label="TCP / UDP">
+            <Mtile label="TCP / UDP" hint="Clique pour voir les ports distants utilisés en TCP et en UDP." detail={
+              <>
+                <div className="mdrow"><span className="mdk">TCP</span><div className="pchips"><PortChips ports={m?.tcp_ports ?? []} /></div></div>
+                <div className="mdrow"><span className="mdk">UDP</span><div className="pchips"><PortChips ports={m?.udp_ports ?? []} /></div></div>
+              </>
+            }>
               <div className="mval"><b>{m?.tcp ?? 0}</b> <span className="sep">/</span> <b>{m?.udp ?? 0}</b></div>
               <DualBar a={m?.tcp ?? 0} b={m?.udp ?? 0} ca="var(--accent2)" cb="var(--accent)" />
             </Mtile>
@@ -262,9 +240,11 @@ function Dashboard({ conns, exposure, metrics, modules, logs, bwHist, scoreHist,
               <div className="mval"><b style={{ color: (m?.listeners_exposed ?? 0) > 0 ? "var(--watch)" : "var(--safe)" }}>{m?.listeners_exposed ?? 0}</b> <span className="sep">/</span> <b>{m?.listeners ?? 0}</b></div>
               <a style={{ fontSize: 11 }} onClick={() => onGo("carte")}>voir la surface entrante →</a>
             </Mtile>
-            <Mtile label="Pays distincts">
-              <div className="mval"><b>{m?.countries?.length ?? 0}</b></div>
-              <div className="mlist">{(m?.countries || []).slice(0, 4).map((c: any) => <span key={c.key}>{c.key} <i>{c.count}</i></span>)}{(!m?.countries?.length) && <span className="muted" style={{ fontStyle: "italic" }}>géo hors-ligne</span>}</div>
+            <Mtile label="Pays distincts" hint="Nombre de pays différents où se trouvent les IP distantes de tes connexions (géolocalisation hors-ligne DB-IP). Utile pour repérer un trafic vers une zone inhabituelle." detail={
+              <div className="mlist">{(m?.countries || []).map((c: any) => <span key={c.key}>{c.key} <i>{c.count} conn.</i></span>)}{(!m?.countries?.length) && <span className="muted" style={{ fontStyle: "italic" }}>géoloc indisponible</span>}</div>
+            }>
+              <div className="mval"><b>{m?.countries?.length ?? 0}</b> <span style={{ fontSize: 11, fontWeight: 400, color: "var(--faint)" }}>pays</span></div>
+              <div className="mlist">{(m?.countries || []).slice(0, 3).map((c: any) => <span key={c.key}>{c.key} <i>{c.count}</i></span>)}{(!m?.countries?.length) && <span className="muted" style={{ fontStyle: "italic" }}>géo hors-ligne</span>}</div>
             </Mtile>
             <Mtile label="Top ports distants">
               <div className="mlist">{(m?.top_ports || []).slice(0, 4).map((p: any) => <span key={p.port}><b style={{ color: p.encrypted ? "var(--safe)" : "var(--watch)" }}>{p.port}</b>{p.service ? ` ${p.service}` : ""} <i>{p.count}</i></span>)}{(!m?.top_ports?.length) && <span className="muted">—</span>}</div>
@@ -581,10 +561,8 @@ function ScanAiButton({ scan }: { scan: ScanResult }) {
 }
 
 /* ============ RECON ============ */
-function Recon({ wifi, lan, scan, onScan }: { wifi: { networks: WifiNet[]; message: string } | null; lan: LanDevice[] | null; scan: ScanResult | null; onScan: (t: string, m: string) => void }) {
-  const nets = wifi?.networks || [];
+function Recon({ lan, scan, onScan }: { lan: LanDevice[] | null; scan: ScanResult | null; onScan: (t: string, m: string) => void }) {
   const devices = lan || [];
-  const rc = (r: string) => (r === "crit" ? "var(--crit)" : r === "watch" ? "var(--watch)" : "var(--safe)");
   const [target, setTarget] = useState("scanme.nmap.org");
   const [mode, setMode] = useState("discret");
   const [help, setHelp] = useState("");
@@ -644,17 +622,8 @@ function Recon({ wifi, lan, scan, onScan }: { wifi: { networks: WifiNet[]; messa
           {scan && !scan.running && scan.hosts.length === 0 && scan.target && !scan.error && <div className="empty">Aucun port ouvert détecté sur {scan.target}.</div>}
           {scan && scan.hosts.length > 0 && <ScanAiButton scan={scan} />}
         </Card>
-        <Card title="Audit WiFi — alternative aircrack" right="natif Windows">
-          <div className="note">Audit réel des réseaux à portée (chiffrement, signal). La <b>capture/crack de handshake</b> (aircrack) reste réservée à Linux + carte en mode monitor.</div>
-          {wifi?.message && <div className="empty">{wifi.message}</div>}
-          {nets.map((n) => (
-            <div className="row" key={n.bssid || n.ssid}>
-              <span className="nm">{n.ssid}</span>
-              <span className="ds">{n.auth || "?"} · canal {n.channel || "?"} · {n.signal}%</span>
-              <span className="stt" style={{ marginLeft: "auto", color: rc(n.risk), borderColor: n.risk === "safe" ? "var(--card-b)" : rc(n.risk) }}>{n.reason}</span>
-            </div>
-          ))}
-        </Card>
+      </div>
+      <div className="col">
         <Card title="Découverte LAN" right={`${devices.length} appareils`}>
           <div className="note">Voisins du réseau local (table ARP, passif). Un appareil au <b>fabricant inconnu</b> mérite vérification.</div>
           {devices.map((d) => (
@@ -665,12 +634,6 @@ function Recon({ wifi, lan, scan, onScan }: { wifi: { networks: WifiNet[]; messa
             </div>
           ))}
           {devices.length === 0 && <div className="empty">Aucun voisin dans le cache ARP (ping le réseau pour le peupler).</div>}
-        </Card>
-      </div>
-      <div className="col">
-        <Card title="WiFi offensif (aircrack)" right="Linux requis">
-          <div className="note"><b>Linux uniquement</b> · carte monitor requise · cible autorisée obligatoire. Sous Windows, utilise l'<b>Audit WiFi</b> ci-contre.</div>
-          <div className="row"><span className="nm">Interface monitor</span><span className="ds">non disponible (Windows)</span><span className="stt off" style={{ marginLeft: "auto" }}>indisponible</span></div>
         </Card>
       </div>
     </div>
@@ -706,7 +669,9 @@ function OsintCard({ airgapped }: { airgapped: boolean }) {
   );
 }
 
-function Offensif({ airgapped }: { airgapped: boolean }) {
+function Offensif({ airgapped, wifi }: { airgapped: boolean; wifi: { networks: WifiNet[]; message: string } | null }) {
+  const nets = wifi?.networks || [];
+  const wrc = (r: string) => (r === "crit" ? "var(--crit)" : r === "watch" ? "var(--watch)" : "var(--safe)");
   const [algo, setAlgo] = useState("md5");
   const [target, setTarget] = useState("");
   const [salt, setSalt] = useState("");
@@ -754,6 +719,22 @@ function Offensif({ airgapped }: { airgapped: boolean }) {
         </Card>
       </div>
       <div className="col">
+        <Card title="Audit WiFi — reconnaissance" right="natif Windows">
+          <div className="note">Audit réel des réseaux à portée (chiffrement, signal, risque). Recon passif ; la <b>capture/crack de handshake</b> (aircrack) reste réservée à Linux + carte monitor.</div>
+          {wifi?.message && <div className="empty">{wifi.message}</div>}
+          {nets.map((n) => (
+            <div className="row" key={n.bssid || n.ssid}>
+              <span className="nm">{n.ssid}</span>
+              <span className="ds">{n.auth || "?"} · canal {n.channel || "?"} · {n.signal}%</span>
+              <span className="stt" style={{ marginLeft: "auto", color: wrc(n.risk), borderColor: n.risk === "safe" ? "var(--card-b)" : wrc(n.risk) }}>{n.reason}</span>
+            </div>
+          ))}
+          {nets.length === 0 && !wifi?.message && <div className="empty">Aucun réseau à portée détecté.</div>}
+        </Card>
+        <Card title="WiFi offensif (aircrack)" right="Linux requis">
+          <div className="note"><b>Linux uniquement</b> · carte monitor requise · cible autorisée obligatoire. Sous Windows, utilise l'<b>Audit WiFi</b> ci-dessus.</div>
+          <div className="row"><span className="nm">Interface monitor</span><span className="ds">non disponible (Windows)</span><span className="stt off" style={{ marginLeft: "auto" }}>indisponible</span></div>
+        </Card>
         <OsintCard airgapped={airgapped} />
         <Card title="Suggestions d'attaque" right="intégré au scan">
           <div className="note">La logique <b>sk-recon</b> (hydra/netexec/feroxbuster selon les services) est <b>déjà greffée sur le scan nmap</b> — vois les « Pistes » sous chaque port dans l'onglet <b>Recon</b>.</div>
@@ -931,7 +912,7 @@ const TABS: [string, string, string?][] = [
   ["bouclier", "Bouclier"],
   ["carte", "Carte réseau"],
   ["remediation", "Remédiation"],
-  ["recon", "Recon & WiFi"],
+  ["recon", "Recon"],
   ["offensif", "Offensif"],
   ["soc", "SOC local"],
   ["connecteurs", "Connecteurs"],
@@ -1009,7 +990,6 @@ export default function App() {
         <div className="gm"><div className="num" style={{ color: bandColor(exposure.data?.band ?? "faible") }}>{exposure.data?.score ?? "—"}</div><div><div className="lab">Exposition</div><div className="band" style={{ color: bandColor(exposure.data?.band ?? "faible") }}>{exposure.data ? bandLabel(exposure.data.band).replace("Exposition ", "") : "…"}</div></div></div>
         <div className="bw"><span><span className="k">↓ DL</span> <span className="dl mono">{fr(bwLast?.d ?? 0)}</span> <span className="k">Mo/s</span></span><span><span className="k">↑ UL</span> <span className="ul mono">{fr(bwLast?.u ?? 0)}</span> <span className="k">Mo/s</span></span></div>
         <div className="spacer"></div>
-        <ThemeSelector />
         <div className={`pill ${airgapped ? "" : "off"}`} style={{ cursor: "pointer" }} onClick={async () => { await api.setAirgapped(!airgapped); }} title="Cliquer pour activer/désactiver le mode air-gapped">
           <span className="on"></span>Air-gapped&nbsp;<b>{airgapped ? "ACTIF" : "OFF"}</b>
           <span style={{ marginLeft: 6, color: "var(--faint)" }}>⇄</span>
@@ -1029,8 +1009,8 @@ export default function App() {
       {tab === "bouclier" && <Bouclier conns={conns} active={sevFilter} setActive={setSevFilter} />}
       {tab === "carte" && <CarteReseau conns={conns} listeners={listeners.data || []} trace={trace.data} traceLabel={traceLabel} onRun={runTrace} onSelect={selectEndpoint} />}
       {tab === "remediation" && <Remediation conns={conns} />}
-      {tab === "recon" && <Recon wifi={wifi.data} lan={lan.data} scan={scan.data} onScan={(t, m) => api.scanRun(t, m)} />}
-      {tab === "offensif" && <Offensif airgapped={airgapped} />}
+      {tab === "recon" && <Recon lan={lan.data} scan={scan.data} onScan={(t, m) => api.scanRun(t, m)} />}
+      {tab === "offensif" && <Offensif airgapped={airgapped} wifi={wifi.data} />}
       {tab === "soc" && <Soc hids={hids.data} />}
       {tab === "connecteurs" && <Connecteurs airgapped={airgapped} connectors={connectors.data || []} onRefresh={() => api.connectors().then((d) => (connectors.data = d)).catch(() => {})} />}
       {tab === "diagnostic" && <Diagnostic logs={logs.data || []} history={history.data || []} timeline={timeline.data || []} beaconing={beaconing.data || []} config={config.data} />}

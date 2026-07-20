@@ -109,10 +109,16 @@ function attachPanZoom(cv: HTMLCanvasElement, view: View, W: number, H: number) 
     return [(clientX - r.left) * (W / r.width), (clientY - r.top) * (H / r.height)];
   };
   const clamp = () => {
-    view.s = Math.min(6, Math.max(1, view.s));
-    view.ox = Math.min(0, Math.max(-(view.s - 1) * W, view.ox));
-    view.oy = Math.min(0, Math.max(-(view.s - 1) * H, view.oy));
-    if (view.s === 1) { view.ox = 0; view.oy = 0; }
+    view.s = Math.min(6, Math.max(0.5, view.s));
+    if (view.s < 1) {
+      // Dézoom : le contenu est plus petit que le cadre → on le centre (vue large de tous les rebonds).
+      view.ox = (W - W * view.s) / 2;
+      view.oy = (H - H * view.s) / 2;
+    } else {
+      view.ox = Math.min(0, Math.max(-(view.s - 1) * W, view.ox));
+      view.oy = Math.min(0, Math.max(-(view.s - 1) * H, view.oy));
+      if (view.s === 1) { view.ox = 0; view.oy = 0; }
+    }
   };
   const onWheel = (e: WheelEvent) => {
     e.preventDefault();
@@ -218,7 +224,7 @@ export function BandwidthChart({ history }: { history: { d: number; u: number }[
 }
 
 /* ---------------- Network graph (réel, survol + zoom/pan) ---------------- */
-interface GNode { x: number; y: number; r: number; s: string; label: string; ip: string; parts: number[]; }
+interface GNode { x: number; y: number; r: number; s: string; label: string; ip: string; dns: string; parts: number[]; }
 export function NetworkGraph({ conns, view, onSelect, trace }: { conns: ScoredConnection[]; view: string; onSelect?: (ip: string) => void; trace?: TraceResult | null }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const state = useRef<{ conns: ScoredConnection[]; view: string; trace: TraceResult | null; dirty: boolean }>({ conns, view, trace: trace || null, dirty: true });
@@ -256,33 +262,33 @@ export function NetworkGraph({ conns, view, onSelect, trace }: { conns: ScoredCo
     let t = 0, raf = 0;
     const build = () => {
       const { conns, view, trace } = state.current;
-      let list: { sev: string; label: string; ip: string }[];
+      let list: { sev: string; label: string; ip: string; dns: string }[];
       const inbound = conns.filter((c) => c.direction === "entrant");
       if (view === "entrant" && inbound.length === 0) {
         // Aucune connexion entrante active → on montre le chemin vers l'IP publique de la box (via le trace).
         list = [];
         const hops = trace?.hops || [];
         const gw = hops.find((h) => h.private);
-        if (gw) list.push({ sev: "safe", label: `Passerelle ${gw.ip}`, ip: gw.ip });
-        if (trace?.public_ip) list.push({ sev: "watch", label: `IP publique ${trace.public_ip}`, ip: trace.public_ip });
+        if (gw) list.push({ sev: "safe", label: `Passerelle ${gw.ip}`, ip: gw.ip, dns: gw.dns || "" });
+        if (trace?.public_ip) list.push({ sev: "watch", label: `IP publique ${trace.public_ip}`, ip: trace.public_ip, dns: "" });
       } else {
-        const byRemote = new Map<string, { sev: string; label: string; ip: string }>();
+        const byRemote = new Map<string, { sev: string; label: string; ip: string; dns: string }>();
         for (const c of conns) {
           const priv = isPrivate(c.remote_addr);
           if (view === "sortant" && (priv || c.direction === "entrant")) continue;
           if (view === "entrant" && c.direction !== "entrant") continue;
           if (view === "local" && !priv) continue;
           const prev = byRemote.get(c.remote_addr);
-          if (!prev || sevRank[c.severity] > sevRank[prev.sev]) byRemote.set(c.remote_addr, { sev: c.severity, label: c.remote_dns || c.remote_addr, ip: c.remote_addr });
+          if (!prev || sevRank[c.severity] > sevRank[prev.sev]) byRemote.set(c.remote_addr, { sev: c.severity, label: c.remote_addr, ip: c.remote_addr, dns: c.remote_dns || "" });
         }
-        list = [...byRemote.values()].slice(0, 40);
+        list = [...byRemote.values()].slice(0, 60);
       }
       dev = { x: W * 0.16, y: H / 2 };
       const R = Math.min(W * 0.33, H * 0.42), cx = W * 0.62, cy = H / 2;
       nodes = list.map((it, i) => {
         const a = -Math.PI / 2 + (i / Math.max(1, list.length)) * Math.PI * 2;
         const crit = it.sev === "crit" || it.sev === "suspect";
-        return { x: cx + Math.cos(a) * R, y: cy + Math.sin(a) * R, r: crit ? 9 : 7, s: it.sev, label: it.label, ip: it.ip, parts: [Math.random(), Math.random()] };
+        return { x: cx + Math.cos(a) * R, y: cy + Math.sin(a) * R, r: crit ? 9 : 7, s: it.sev, label: it.label, ip: it.ip, dns: it.dns, parts: [Math.random(), Math.random()] };
       });
       state.current.dirty = false;
     };
@@ -313,8 +319,15 @@ export function NetworkGraph({ conns, view, onSelect, trace }: { conns: ScoredCo
         ctx.beginPath(); ctx.fillStyle = "#0a0c10"; ctx.arc(nx, ny, Math.max(r - 2.5, 1), 0, 7); ctx.fill();
         ctx.beginPath(); ctx.fillStyle = c; ctx.arc(nx, ny, Math.max(r - 5, 1.4), 0, 7); ctx.fill();
         const right = nx >= dx;
-        ctx.fillStyle = cvar("--ink", "#e8ecf2"); ctx.font = "10px Consolas, monospace"; ctx.textAlign = right ? "left" : "right";
-        ctx.fillText(n.label.slice(0, 26), right ? nx + r + 6 : nx - r - 6, ny + 3);
+        const tx = right ? nx + r + 6 : nx - r - 6;
+        ctx.textAlign = right ? "left" : "right";
+        // Ligne 1 : l'adresse (IP). Ligne 2 (dessous, atténuée) : la résolution DNS.
+        ctx.fillStyle = cvar("--ink", "#e8ecf2"); ctx.font = "10px Consolas, monospace";
+        ctx.fillText(n.label.slice(0, 28), tx, n.dns ? ny - 1 : ny + 3);
+        if (n.dns) {
+          ctx.fillStyle = cvar("--soft", "#9aa6b4"); ctx.font = "9px Consolas, monospace";
+          ctx.fillText(n.dns.slice(0, 30), tx, ny + 9);
+        }
       });
       ctx.strokeStyle = cvar("--accent", "#2fe0d0"); ctx.lineWidth = 2; ctx.fillStyle = "#0d1017";
       ctx.beginPath(); (ctx as any).roundRect(dx - 56, dy - 15, 112, 30, 6); ctx.fill(); ctx.stroke();
@@ -322,7 +335,7 @@ export function NetworkGraph({ conns, view, onSelect, trace }: { conns: ScoredCo
       ctx.fillText("CET APPAREIL", dx, dy + 4);
       if (hover) {
         const h = hover as GNode; const [hx, hy] = T(h.x, h.y);
-        const txt = `${h.label}  ·  ${h.ip}  ·  ${h.s}`;
+        const txt = `${h.ip}${h.dns ? "  ·  " + h.dns : ""}  ·  ${h.s}`;
         ctx.font = "11px Consolas, monospace"; const w = ctx.measureText(txt).width + 16;
         ctx.fillStyle = "#0d1119"; ctx.strokeStyle = cvar("--card-b", "#2fe0d0");
         (ctx as any).roundRect(hx + 10, hy - 12, w, 22, 5); ctx.fill(); ctx.stroke();

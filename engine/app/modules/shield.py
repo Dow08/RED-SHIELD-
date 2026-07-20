@@ -76,6 +76,8 @@ class NetMetrics(BaseModel):
     listeners_exposed: int = 0
     countries: list[KeyCount] = []
     top_ports: list[PortCount] = []
+    tcp_ports: list[PortCount] = []
+    udp_ports: list[PortCount] = []
 
 
 class TopTalker(BaseModel):
@@ -265,6 +267,8 @@ class ShieldModule(Module):
         listen_ports = self._listen_ports(raw)
         m = NetMetrics()
         ports: Counter[int] = Counter()
+        tcp_ports: Counter[int] = Counter()
+        udp_ports: Counter[int] = Counter()
         countries: Counter[str] = Counter()
         endpoints: set[str] = set()
         for c in raw:
@@ -277,8 +281,10 @@ class ShieldModule(Module):
                 m.outbound += 1
             if c.type == socket.SOCK_STREAM:
                 m.tcp += 1
+                tcp_ports[c.raddr.port] += 1
             else:
                 m.udp += 1
+                udp_ports[c.raddr.port] += 1
             if c.raddr.port in _ENCRYPTED_PORTS:
                 m.encrypted += 1
             else:
@@ -297,10 +303,14 @@ class ShieldModule(Module):
         m.listeners = len(listeners)
         m.listeners_exposed = sum(1 for l in listeners if l.exposed)
         m.countries = [KeyCount(key=k, count=n) for k, n in countries.most_common(6)]
-        m.top_ports = [
-            PortCount(port=p, count=n, service=_PORT_SERVICE.get(p, ""), encrypted=p in _ENCRYPTED_PORTS)
-            for p, n in ports.most_common(6)
-        ]
+        def _mk(counter: Counter, k: int = 6) -> list[PortCount]:
+            return [
+                PortCount(port=p, count=n, service=_PORT_SERVICE.get(p, ""), encrypted=p in _ENCRYPTED_PORTS)
+                for p, n in counter.most_common(k)
+            ]
+        m.top_ports = _mk(ports)
+        m.tcp_ports = _mk(tcp_ports, 8)
+        m.udp_ports = _mk(udp_ports, 8)
         return m
 
     def top_talkers(self) -> list[TopTalker]:
