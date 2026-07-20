@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
-import type { Beacon, CrackResult, HidsResult, LanDevice, MailAnalysis, ScanResult, ScoredConnection, Severity, TimelineEvent, TraceResult, WifiNet } from "./api";
+import type { Beacon, ConnectorStatus, CrackResult, HidsResult, IntelResult, LanDevice, LlmResult, MailAnalysis, OsintResult, ScanResult, ScoredConnection, Severity, TimelineEvent, TraceResult, WifiNet } from "./api";
 import { usePolling } from "./hooks";
 import { BandwidthChart, NetworkGraph, Sparkline, TraceMap } from "./viz";
 
@@ -27,6 +27,23 @@ function Card({ title, right, children, className }: { title: string; right?: Re
       </div>
       {children}
     </div>
+  );
+}
+
+function ReputationButton({ ip }: { ip: string }) {
+  const [res, setRes] = useState<IntelResult | null>(null);
+  const [busy, setBusy] = useState(false);
+  const run = async () => { setBusy(true); try { setRes(await api.intelIp(ip)); } catch { setRes(null); } setBusy(false); };
+  return (
+    <span style={{ display: "inline-flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+      <button className="btn ghost" onClick={run} disabled={busy}>{busy ? "…" : "Réputation"}</button>
+      {res && !res.available && <span className="muted" style={{ fontSize: 11 }}>{res.reason}</span>}
+      {res?.available && res.sources.map((s: any, i: number) => (
+        <span key={i} className="badge" style={{ borderColor: s.malicious || s.score ? "var(--crit)" : "var(--card-b)" }}>
+          {s.source}: {s.error ? s.error : s.malicious !== undefined ? `${s.malicious} malveillant` : s.score !== undefined ? `score ${s.score}` : "ok"}
+        </span>
+      ))}
+    </span>
   );
 }
 
@@ -381,10 +398,28 @@ function Remediation({ conns }: { conns: ScoredConnection[] }) {
             <div className="rmeta">{c.mitre.map((t) => <a key={t.id} className="badge m" href={t.url} target="_blank" rel="noopener">{t.id} — {t.name} ↗</a>)}</div>
           )}
           <div className="rbody"><b>Remédiation :</b> investiguer le process et sa légitimité, vérifier la persistance, couper la connexion si non autorisée.</div>
-          <div className="actions" style={{ border: "none", padding: "8px 0 0" }}><CutButton ip={c.remote_addr} /></div>
+          <div className="actions" style={{ border: "none", padding: "8px 0 0" }}><CutButton ip={c.remote_addr} /><ReputationButton ip={c.remote_addr} /></div>
         </div>
       ))}
     </Card>
+  );
+}
+
+function ScanAiButton({ scan }: { scan: ScanResult }) {
+  const [res, setRes] = useState<LlmResult | null>(null);
+  const [busy, setBusy] = useState(false);
+  const run = async () => {
+    setBusy(true); setRes(null);
+    const text = scan.hosts.map((h) => `Hôte ${h.ip} (${h.os || "?"}):\n` + h.ports.map((p) => `  ${p.port}/${p.protocol} ${p.service} ${p.product} ${p.version}${p.cves.length ? " CVE:" + p.cves.map((c) => c.cve).join(",") : ""}`).join("\n")).join("\n");
+    try { setRes(await api.llmAnalyze(text, "résultat de scan nmap")); } catch { setRes({ ok: false, error: "moteur injoignable" }); }
+    setBusy(false);
+  };
+  return (
+    <div style={{ padding: "10px 16px" }}>
+      <button className="btn" onClick={run} disabled={busy}>{busy ? "Analyse IA…" : "🤖 Analyser le scan avec l'IA"}</button>
+      {res && !res.ok && <div className="disc" style={{ paddingTop: 8, color: "var(--watch)" }}>{res.error} (configure le connecteur LLM)</div>}
+      {res?.ok && <div className="rbody" style={{ whiteSpace: "pre-wrap", marginTop: 8, padding: 12, background: "var(--card-solid)", borderRadius: 8 }}>{res.analysis}</div>}
+    </div>
   );
 }
 
@@ -450,6 +485,7 @@ function Recon({ wifi, lan, scan, onScan }: { wifi: { networks: WifiNet[]; messa
             </div>
           ))}
           {scan && !scan.running && scan.hosts.length === 0 && scan.target && !scan.error && <div className="empty">Aucun port ouvert détecté sur {scan.target}.</div>}
+          {scan && scan.hosts.length > 0 && <ScanAiButton scan={scan} />}
         </Card>
         <Card title="Audit WiFi — alternative aircrack" right="natif Windows">
           <div className="note">Audit réel des réseaux à portée (chiffrement, signal). La <b>capture/crack de handshake</b> (aircrack) reste Linux + carte monitor (Jalon 4).</div>
@@ -485,7 +521,35 @@ function Recon({ wifi, lan, scan, onScan }: { wifi: { networks: WifiNet[]; messa
 }
 
 /* ============ OFFENSIF (cracker de hash) ============ */
-function Offensif() {
+function OsintCard({ airgapped }: { airgapped: boolean }) {
+  const [domain, setDomain] = useState("");
+  const [res, setRes] = useState<OsintResult | null>(null);
+  const [busy, setBusy] = useState(false);
+  const run = async () => { setBusy(true); setRes(null); try { setRes(await api.osintSubdomains(domain.trim())); } catch { setRes({ available: true, error: "moteur injoignable", subdomains: [] }); } setBusy(false); };
+  return (
+    <Card title="OSINT passif — sous-domaines (crt.sh)" right="passif · air-gapped OFF">
+      <div className="note">Recon <b>100 % passif</b> (aucun paquet vers la cible) via la transparence des certificats. Nécessite d'avoir <b>désactivé air-gapped</b> (pastille en haut).</div>
+      <div className="toolbar">
+        <input className="key" style={{ letterSpacing: 0, width: 200 }} value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="exemple.com" />
+        <button className="btn" disabled={!domain.trim() || busy || airgapped} onClick={run}>{busy ? "Recherche…" : "Énumérer"}</button>
+      </div>
+      {airgapped && <div className="empty">Mode air-gapped actif — désactive-le pour lancer l'OSINT.</div>}
+      {res && !res.available && <div className="empty">{res.reason}</div>}
+      {res?.error && <div className="empty">Erreur : {res.error}</div>}
+      {res?.available && res.subdomains.length > 0 && (
+        <>
+          <div className="disc" style={{ padding: "8px 16px 0" }}>{res.subdomains.length} sous-domaine(s) :</div>
+          <div style={{ padding: "6px 16px 12px", display: "flex", flexDirection: "column", gap: 2, maxHeight: 260, overflowY: "auto" }}>
+            {res.subdomains.map((s) => <span key={s} className="mono" style={{ fontSize: 11, color: "var(--soft)" }}>{s}</span>)}
+          </div>
+        </>
+      )}
+      {res?.available && !res.error && res.subdomains.length === 0 && <div className="empty">Aucun sous-domaine trouvé.</div>}
+    </Card>
+  );
+}
+
+function Offensif({ airgapped }: { airgapped: boolean }) {
   const [algo, setAlgo] = useState("md5");
   const [target, setTarget] = useState("");
   const [salt, setSalt] = useState("");
@@ -533,9 +597,7 @@ function Offensif() {
         </Card>
       </div>
       <div className="col">
-        <Card title="OSINT passif" right="Jalon 2 · air-gapped OFF">
-          <div className="note">Recon passif (subdomains via crt.sh, reverse-IP, ASN) repris du toolkit — nécessite de désactiver le mode air-gapped (appels externes). À venir.</div>
-        </Card>
+        <OsintCard airgapped={airgapped} />
         <Card title="Suggestions d'attaque" right="Jalon 3">
           <div className="note">La logique de <b>sk-recon</b> (suggestions hydra/netexec/feroxbuster selon les services) sera greffée sur le scan nmap au Jalon 3.</div>
         </Card>
@@ -605,18 +667,36 @@ function Soc({ hids }: { hids: HidsResult | null }) {
 }
 
 /* ============ CONNECTEURS ============ */
-function Connecteurs({ airgapped }: { airgapped: boolean }) {
-  const items = ["VirusTotal", "AbuseIPDB", "GreyNoise", "Shodan", "Wazuh (SIEM)", "Microsoft Defender (EDR)", "LLM (rapport IA)"];
+function Connecteurs({ airgapped, connectors, onRefresh }: { airgapped: boolean; connectors: ConnectorStatus[]; onRefresh: () => void }) {
+  const [keys, setKeys] = useState<Record<string, string>>({});
+  const [llm, setLlm] = useState({ provider: "ollama", url: "http://localhost:11434", model: "llama3", key: "" });
+  const connected = (n: string) => connectors.find((c) => c.name === n)?.connected;
+  const save = async (n: string) => { await api.connectorSet(n, keys[n] || ""); setKeys({ ...keys, [n]: "" }); onRefresh(); };
+  const del = async (n: string) => { await api.connectorDelete(n); onRefresh(); };
+  const saveLlm = async () => { await api.connectorSet("llm", JSON.stringify(llm)); onRefresh(); };
+  const simple: [string, string][] = [["virustotal", "VirusTotal"], ["abuseipdb", "AbuseIPDB"], ["greynoise", "GreyNoise"], ["shodan", "Shodan"]];
   return (
-    <Card title="Connecteurs — clés API" right="chiffrées (keyring)">
-      <div className="note">Actifs uniquement si le <b>mode air-gapped est désactivé</b> (actuellement {airgapped ? "ACTIF" : "inactif"}). Aucune clé en clair. Branchement effectif : Jalon 2.</div>
-      {items.map((n) => (
-        <div className="row" key={n}>
-          <span className="nm">{n}</span>
-          <input className="key" type="password" placeholder="clé API" disabled style={{ marginLeft: "auto" }} />
-          <span className="stt off">non connecté</span>
+    <Card title="Connecteurs — clés API" right="chiffrées (keyring OS)">
+      <div className="note">Actifs seulement si <b>air-gapped désactivé</b> (actuellement <b style={{ color: airgapped ? "var(--watch)" : "var(--safe)" }}>{airgapped ? "ACTIF" : "OFF"}</b> — bascule via la pastille en haut à droite). Clés chiffrées dans le trousseau de l'OS, jamais réaffichées. <b>Je ne génère aucun compte</b> : utilise tes propres clés.</div>
+      {simple.map(([name, label]) => (
+        <div className="row" key={name}>
+          <span className="nm">{label}</span>
+          <input className="key" type="password" placeholder={connected(name) ? "•••• (configuré)" : "clé API"} value={keys[name] || ""} onChange={(e) => setKeys({ ...keys, [name]: e.target.value })} style={{ marginLeft: "auto" }} />
+          <button className="btn ghost" disabled={!(keys[name] || "").trim()} onClick={() => save(name)}>Enregistrer</button>
+          {connected(name) ? <><span className="stt on">connecté ✓</span><button className="btn ghost" onClick={() => del(name)}>Supprimer</button></> : <span className="stt off">non connecté</span>}
         </div>
       ))}
+      <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
+        <span className="nm">LLM (analyse IA)</span>
+        <span className="seg">{["ollama", "anthropic", "openai"].map((p) => <button key={p} className={llm.provider === p ? "on" : ""} onClick={() => setLlm({ ...llm, provider: p })}>{p}</button>)}</span>
+        {llm.provider === "ollama"
+          ? <input className="key" style={{ letterSpacing: 0, width: 180 }} value={llm.url} onChange={(e) => setLlm({ ...llm, url: e.target.value })} placeholder="http://localhost:11434" />
+          : <input className="key" type="password" style={{ width: 160 }} value={llm.key} onChange={(e) => setLlm({ ...llm, key: e.target.value })} placeholder="clé API" />}
+        <input className="key" style={{ letterSpacing: 0, width: 130 }} value={llm.model} onChange={(e) => setLlm({ ...llm, model: e.target.value })} placeholder="modèle" />
+        <button className="btn ghost" onClick={saveLlm}>Enregistrer</button>
+        {connected("llm") ? <><span className="stt on">connecté ✓</span><button className="btn ghost" onClick={() => del("llm")}>Supprimer</button></> : <span className="stt off">non connecté</span>}
+      </div>
+      <div className="disc" style={{ padding: "10px 16px" }}>💡 Ollama (local, gratuit, hors-ligne) fonctionne même sous air-gapped. Anthropic/OpenAI = clé perso + air-gapped OFF.</div>
     </Card>
   );
 }
@@ -711,6 +791,7 @@ export default function App() {
   const lan = usePolling(api.lan, 20000);
   const scan = usePolling(api.scan, 4000);
   const hids = usePolling(api.hids, 8000);
+  const connectors = usePolling(api.connectors, 6000);
   const [traceLabel, setTraceLabel] = useState("");
   const runTrace = (t: string) => { setTraceTarget(t); api.traceRun(t); };
   const selectEndpoint = (ip: string) => {
@@ -742,9 +823,9 @@ export default function App() {
         <div className="gm"><div className="num" style={{ color: bandColor(exposure.data?.band ?? "faible") }}>{exposure.data?.score ?? "—"}</div><div><div className="lab">Exposition</div><div className="band" style={{ color: bandColor(exposure.data?.band ?? "faible") }}>{exposure.data ? bandLabel(exposure.data.band).replace("Exposition ", "") : "…"}</div></div></div>
         <div className="bw"><span><span className="k">↓ DL</span> <span className="dl mono">{fr(bwLast?.d ?? 0)}</span> <span className="k">Mo/s</span></span><span><span className="k">↑ UL</span> <span className="ul mono">{fr(bwLast?.u ?? 0)}</span> <span className="k">Mo/s</span></span></div>
         <div className="spacer"></div>
-        <div className={`pill ${airgapped ? "" : "off"}`} title="Mode air-gapped : coupe TOUT appel réseau externe (VirusTotal, géolocalisation en ligne, LLM…). Les analyses restent 100 % locales. À désactiver (dans .env) pour brancher les connecteurs.">
+        <div className={`pill ${airgapped ? "" : "off"}`} style={{ cursor: "pointer" }} onClick={async () => { await api.setAirgapped(!airgapped); }} title="Mode air-gapped : coupe TOUT appel réseau externe (VirusTotal, OSINT, LLM…). Les analyses restent 100 % locales. Clique pour activer/désactiver — désactive-le pour utiliser les connecteurs.">
           <span className="on"></span>Air-gapped&nbsp;<b>{airgapped ? "ACTIF" : "OFF"}</b>
-          <span style={{ marginLeft: 6, color: "var(--faint)", cursor: "help" }}>ⓘ</span>
+          <span style={{ marginLeft: 6, color: "var(--faint)" }}>⇄</span>
         </div>
       </div>
 
@@ -761,9 +842,9 @@ export default function App() {
       {tab === "carte" && <CarteReseau conns={conns} trace={trace.data} traceLabel={traceLabel} onRun={runTrace} onSelect={selectEndpoint} />}
       {tab === "remediation" && <Remediation conns={conns} />}
       {tab === "recon" && <Recon wifi={wifi.data} lan={lan.data} scan={scan.data} onScan={(t, m) => api.scanRun(t, m)} />}
-      {tab === "offensif" && <Offensif />}
+      {tab === "offensif" && <Offensif airgapped={airgapped} />}
       {tab === "soc" && <Soc hids={hids.data} />}
-      {tab === "connecteurs" && <Connecteurs airgapped={airgapped} />}
+      {tab === "connecteurs" && <Connecteurs airgapped={airgapped} connectors={connectors.data || []} onRefresh={() => api.connectors().then((d) => (connectors.data = d)).catch(() => {})} />}
       {tab === "diagnostic" && <Diagnostic logs={logs.data || []} history={history.data || []} timeline={timeline.data || []} beaconing={beaconing.data || []} />}
 
       <div className="foot">RED Shield · Jalon 1 · style mix moderne · données réelles (aucune inventée)</div>

@@ -14,10 +14,17 @@ from app import __version__
 from app.config import settings
 from app.core.bus import EventBus
 from app.core.registry import Registry
+from pydantic import BaseModel
+
 from app.modules.analytics import AnalyticsModule
 from app.modules.base import ModuleStatus
 from app.modules.bandwidth import BandwidthModule
+from app.modules.connectors import ConnectorsModule
 from app.modules.cracker import CrackerModule, CrackRequest
+from app.modules.intel import IntelModule
+from app.modules.llm import LlmModule
+from app.modules.osint import OsintModule
+from app.runtime import runtime
 from app.modules.firewall import FirewallModule, FwRequest
 from app.modules.hids import HidsModule
 from app.modules.lan import LanModule
@@ -32,6 +39,23 @@ from app.modules.wifi import WifiModule
 from app.report.markdown import build_markdown
 
 logging.basicConfig(level=logging.INFO)
+
+
+class AirgapReq(BaseModel):
+    airgapped: bool
+
+
+class KeyReq(BaseModel):
+    key: str
+
+
+class OsintReq(BaseModel):
+    domain: str
+
+
+class LlmReq(BaseModel):
+    text: str
+    kind: str = "rapport"
 
 
 def register_modules(registry: Registry, bus: EventBus) -> None:
@@ -54,6 +78,11 @@ def register_modules(registry: Registry, bus: EventBus) -> None:
     registry.register(ScanModule(bus))
     registry.register(HidsModule(bus))
     registry.register(MailModule(bus))
+    connectors = ConnectorsModule(bus)
+    registry.register(connectors)
+    registry.register(IntelModule(bus, connectors))
+    registry.register(OsintModule(bus))
+    registry.register(LlmModule(bus, connectors))
     registry.register(AnalyticsModule(bus, shield, scoring))
 
 
@@ -83,8 +112,18 @@ def create_app() -> FastAPI:
             "status": "ok",
             "service": "RED",
             "version": __version__,
-            "airgapped": settings.airgapped,
+            "airgapped": runtime.airgapped,
         }
+
+    @app.get("/config")
+    def config_get() -> dict:
+        return {"airgapped": runtime.airgapped}
+
+    @app.post("/config/airgapped")
+    def config_airgapped(req: AirgapReq) -> dict:
+        runtime.airgapped = req.airgapped
+        bus.publish("log", {"level": "warn", "module": "config", "message": f"air-gapped = {req.airgapped}"})
+        return {"airgapped": runtime.airgapped}
 
     @app.get("/modules", response_model=list)
     def modules() -> list:
@@ -192,6 +231,33 @@ def create_app() -> FastAPI:
     @app.post("/mail/analyze")
     def mail_analyze(req: MailRequest):
         return _require("mail").analyze(req.eml)
+
+    @app.get("/connectors")
+    def connectors_status():
+        module = registry.get("connectors")
+        return module.status() if module is not None else []
+
+    @app.post("/connectors/{name}")
+    def connectors_set(name: str, req: KeyReq):
+        _require("connectors").set(name, req.key)
+        return {"ok": True, "name": name}
+
+    @app.delete("/connectors/{name}")
+    def connectors_delete(name: str):
+        _require("connectors").delete(name)
+        return {"ok": True, "name": name}
+
+    @app.get("/intel/ip")
+    def intel_ip(ip: str):
+        return _require("intel").lookup_ip(ip)
+
+    @app.post("/osint/subdomains")
+    def osint_subdomains(req: OsintReq):
+        return _require("osint").subdomains(req.domain)
+
+    @app.post("/llm/analyze")
+    def llm_analyze(req: LlmReq):
+        return _require("llm").analyze(req.text, req.kind)
 
     @app.get("/analytics/timeline")
     def analytics_timeline(limit: int = 100):
