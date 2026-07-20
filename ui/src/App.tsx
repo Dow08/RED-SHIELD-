@@ -456,7 +456,7 @@ function Bouclier({ conns, active, setActive }: { conns: ScoredConnection[]; act
 }
 
 /* ============ CARTE RÉSEAU ============ */
-function CarteReseau({ conns, listeners, trace, traceLabel, onRun, onSelect }: { conns: ScoredConnection[]; listeners: import("./api").Listener[]; trace: TraceResult | null; traceLabel: string; onRun: (t: string) => void; onSelect: (ip: string) => void }) {
+function CarteReseau({ conns, listeners, trace, traceLabel, geoPoints, onRun, onSelect }: { conns: ScoredConnection[]; listeners: import("./api").Listener[]; trace: TraceResult | null; traceLabel: string; geoPoints: import("./api").GeoPoint[]; onRun: (t: string) => void; onSelect: (ip: string) => void }) {
   const [view, setView] = useState("sortant");
   const [target, setTarget] = useState("1.1.1.1");
   const labels: Record<string, string> = { sortant: "Sortant", entrant: "Entrant", local: "Local (LAN)", tous: "Tous" };
@@ -509,7 +509,13 @@ function CarteReseau({ conns, listeners, trace, traceLabel, onRun, onSelect }: {
       </Card>
       <div style={{ height: 12 }} />
       <Card title="Tracé de connexion — carte du monde" right={<><div className="search" style={{ marginRight: 8 }}><input value={target} onChange={(e) => setTarget(e.target.value)} style={{ width: 120 }} /></div><button className="btn ghost" onClick={() => onRun(target)}>Lancer le tracé</button></>}>
-        <div className="stage"><TraceMap trace={trace} destLabel={traceLabel} /></div>
+        <div className="stage"><TraceMap trace={trace} destLabel={traceLabel} points={geoPoints} /></div>
+        <div className="legend" style={{ paddingBottom: 0 }}>
+          <span><span className="d" style={{ background: "var(--safe)" }}></span>Connexion saine</span>
+          <span><span className="d" style={{ background: "var(--watch)" }}></span>À surveiller</span>
+          <span><span className="d" style={{ background: "var(--crit)" }}></span>Suspecte / critique</span>
+          <span style={{ color: "var(--faint)" }}>· {geoPoints.length} connexion(s) géolocalisée(s) · le tracé actif est en surbrillance</span>
+        </div>
         <div className="disc">
           Molette = zoom · glisser = déplacer.{" "}
           {trace?.vpn_active && <b style={{ color: "var(--safe)" }}>VPN {trace.vpn_adapter} · </b>}
@@ -994,6 +1000,7 @@ export default function App() {
   const listeners = usePolling(api.listeners, 8000);
   const thrStatus = usePolling(api.throughputStatus, 6000);
   const thrProcs = usePolling(api.throughputProcesses, 2000);
+  const geoPoints = usePolling(api.geoPoints, 6000);
   const logs = usePolling(() => api.logs(), 5000);
   const history = usePolling(api.history, 8000);
   const [traceTarget, setTraceTarget] = useState("1.1.1.1");
@@ -1069,7 +1076,7 @@ export default function App() {
 
       {tab === "dashboard" && <Dashboard conns={conns} exposure={exposure.data} metrics={metrics.data} modules={mods} logs={logs.data || []} bwHist={bwHist} bw={bandwidth.data} scoreHist={scoreHist} top={top.data || []} thrStatus={thrStatus.data} thrProcs={thrProcs.data || []} trace={trace.data} beaconing={beaconing.data || []} sevFilter={sevFilter} onGo={setTab} onSelect={selectEndpoint} />}
       {tab === "bouclier" && <Bouclier conns={conns} active={sevFilter} setActive={setSevFilter} />}
-      {tab === "carte" && <CarteReseau conns={conns} listeners={listeners.data || []} trace={trace.data} traceLabel={traceLabel} onRun={runTrace} onSelect={selectEndpoint} />}
+      {tab === "carte" && <CarteReseau conns={conns} listeners={listeners.data || []} trace={trace.data} traceLabel={traceLabel} geoPoints={geoPoints.data || []} onRun={runTrace} onSelect={selectEndpoint} />}
       {tab === "remediation" && <Remediation conns={conns} />}
       {tab === "recon" && <Recon lan={lan.data} scan={scan.data} onScan={(t, m) => api.scanRun(t, m)} />}
       {tab === "offensif" && <Offensif airgapped={airgapped} wifi={wifi.data} />}

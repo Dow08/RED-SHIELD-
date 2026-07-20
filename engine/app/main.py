@@ -160,6 +160,16 @@ def create_app() -> FastAPI:
     def shield_listeners() -> list:
         return _require("shield").get_listeners()
 
+    @app.get("/shield/geo")
+    def shield_geo():
+        trace_mod = registry.get("trace")
+        geo = trace_mod._geo_lookup if (trace_mod is not None and getattr(trace_mod, "geo_available", False)) else None
+        shield = _require("shield")
+        scoring = registry.get("scoring")
+        conns = shield.get_connections()
+        scored = scoring.score_connections(conns) if (scoring is not None and scoring.health() == ModuleStatus.ACTIVE) else conns
+        return shield.geo_points(scored, geo)
+
     @app.get("/shield/metrics")
     def shield_metrics():
         # Géolocalisation des pays via la base hors-ligne du module trace (si dispo).

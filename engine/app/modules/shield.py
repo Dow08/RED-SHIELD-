@@ -93,6 +93,20 @@ class TopTalker(BaseModel):
     connections: int
 
 
+class GeoPoint(BaseModel):
+    ip: str
+    lat: float
+    lon: float
+    country: str = ""
+    city: str = ""
+    process: str = ""
+    count: int = 1
+    severity: str = "safe"
+
+
+_SEV_RANK = {"safe": 0, "watch": 1, "suspect": 2, "crit": 3}
+
+
 # Ports chiffrés courants (transport TLS/SSH/…) — pour le ratio chiffré/clair.
 _ENCRYPTED_PORTS = {22, 443, 465, 563, 636, 853, 989, 990, 993, 995, 5061, 6697, 8443}
 # Libellés de services courants (indicatif, pour l'affichage des top ports).
@@ -331,6 +345,42 @@ class ShieldModule(Module):
         m.tcp_ports = _mk(tcp_ports, 8)
         m.udp_ports = _mk(udp_ports, 8)
         return m
+
+    def geo_points(self, scored: list, geo) -> list[GeoPoint]:
+        """Points géolocalisés des connexions distantes publiques (pour la mappemonde).
+
+        Agrège par IP : position (lat/lon via geo hors-ligne), process représentatif,
+        nombre de connexions, sévérité maximale. `scored` = connexions notées.
+        """
+        if geo is None:
+            return []
+        agg: dict[str, dict] = {}
+        for c in scored:
+            ip = c.remote_addr
+            try:
+                ipa = ipaddress.ip_address(ip)
+            except ValueError:
+                continue
+            if ipa.is_loopback or ipa.is_private:
+                continue
+            try:
+                g = geo(ip)
+            except Exception:
+                g = None
+            if not g or g.get("lat") is None or g.get("lon") is None:
+                continue
+            sev = getattr(c, "severity", "safe")
+            e = agg.get(ip)
+            if e is None:
+                agg[ip] = {"ip": ip, "lat": g["lat"], "lon": g["lon"], "country": g.get("country") or "",
+                           "city": g.get("city") or "", "process": c.process, "count": 1, "sev": sev}
+            else:
+                e["count"] += 1
+                if _SEV_RANK.get(sev, 0) > _SEV_RANK.get(e["sev"], 0):
+                    e["sev"] = sev
+                    e["process"] = c.process
+        return [GeoPoint(ip=e["ip"], lat=e["lat"], lon=e["lon"], country=e["country"], city=e["city"],
+                         process=e["process"], count=e["count"], severity=e["sev"]) for e in agg.values()]
 
     def top_talkers(self) -> list[TopTalker]:
         """Process avec le plus de connexions actives (proxy réel de sollicitation)."""

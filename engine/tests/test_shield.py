@@ -116,6 +116,21 @@ def test_direction_and_metrics_deterministic(monkeypatch):
     assert top[80].encrypted is False
 
 
+def test_geo_points_deterministic(monkeypatch):
+    """Points géolocalisés : IP publiques uniquement, agrégées, avec lat/lon."""
+    import psutil
+    monkeypatch.setattr(psutil, "net_connections", lambda kind="inet": _fake_raw())
+    mod = ShieldModule(EventBus())
+    conns = mod.get_connections(resolve_dns=False)  # 203.0.113.5 (doc), 140.82.121.4, 93.184.216.34
+    pts = mod.geo_points(conns, geo=lambda ip: {"lat": 48.0, "lon": 2.0, "country": "FR", "city": "Paris"})
+    ips = {p.ip for p in pts}
+    # IP publiques routables uniquement ; loopback/privé/documentation (203.0.113/24) exclus.
+    assert ips == {"140.82.121.4", "93.184.216.34"}
+    assert all(p.lat == 48.0 and p.lon == 2.0 and p.country == "FR" for p in pts)
+    # sans geo → aucun point
+    assert mod.geo_points(conns, geo=None) == []
+
+
 def test_bandwidth_rates_shape():
     mod = BandwidthModule(EventBus())
     mod.start()

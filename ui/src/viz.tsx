@@ -358,12 +358,14 @@ const CONTS: [number, number, number, number][] = [
   [-100, 48, 30, 20], [-95, 63, 44, 10], [-88, 13, 10, 9], [-60, -18, 17, 28],
   [12, 52, 24, 12], [20, 2, 23, 33], [92, 52, 52, 23], [78, 22, 12, 14], [112, 8, 16, 12], [134, -25, 15, 11],
 ];
-export function TraceMap({ trace, destLabel }: { trace: TraceResult | null; destLabel?: string }) {
+export function TraceMap({ trace, destLabel, points }: { trace: TraceResult | null; destLabel?: string; points?: import("./api").GeoPoint[] }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const dataRef = useRef<TraceResult | null>(trace);
   const destRef = useRef<string | undefined>(destLabel);
+  const pointsRef = useRef<import("./api").GeoPoint[]>(points || []);
   useEffect(() => { dataRef.current = trace; }, [trace]);
   useEffect(() => { destRef.current = destLabel; }, [destLabel]);
+  useEffect(() => { pointsRef.current = points || []; }, [points]);
   useEffect(() => {
     const cv = ref.current!;
     const ctx = cv.getContext("2d")!;
@@ -399,10 +401,20 @@ export function TraceMap({ trace, destLabel }: { trace: TraceResult | null; dest
       ctx.strokeStyle = "rgba(120,220,225,0.10)"; ctx.lineWidth = 1;
       for (let lon = -180; lon <= 180; lon += 30) { const [x] = proj(lon, 0); const [ax, ay] = T(x, 0), [bx, by] = T(x, H); ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke(); }
       for (let lat = -90; lat <= 90; lat += 30) { const [, y] = proj(0, lat); const [ax, ay] = T(0, y), [bx, by] = T(W, y); ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke(); }
+      const cm = { gold: cvar("--accent", "#2fe0d0"), crit: cvar("--crit", "#fb5b6b"), ink: cvar("--ink", "#e8ecf2"), faint: cvar("--faint", "#586372"), safe: cvar("--safe", "#34d399"), watch: cvar("--watch", "#fbbf24") };
+      // Connexions réelles géolocalisées (points colorés par sévérité) sous le tracé.
+      const gpts = pointsRef.current || [];
+      const scol = (s: string) => (s === "crit" || s === "suspect" ? cm.crit : s === "watch" ? cm.watch : cm.safe);
+      gpts.forEach((g) => {
+        const [x, y] = proj(g.lon, g.lat); const [px, py] = T(x, y);
+        const c = scol(g.severity); const crit = g.severity === "crit" || g.severity === "suspect";
+        if (crit) { ctx.beginPath(); ctx.fillStyle = c; ctx.globalAlpha = 0.1 + 0.1 * Math.sin(t * 3); ctx.arc(px, py, 9, 0, 7); ctx.fill(); ctx.globalAlpha = 1; }
+        ctx.beginPath(); ctx.fillStyle = c; ctx.globalAlpha = 0.5; ctx.arc(px, py, crit ? 4 : 2.8, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
+        ctx.beginPath(); ctx.fillStyle = c; ctx.arc(px, py, crit ? 2.2 : 1.6, 0, 7); ctx.fill();
+      });
       const tr = dataRef.current;
       const geoHops = (tr?.hops || []).filter((h) => h.lat != null && h.lon != null);
       const pts = geoHops.map((h) => { const [x, y] = proj(h.lon!, h.lat!); const [px, py] = T(x, y); return { px, py, h }; });
-      const cm = { gold: cvar("--accent", "#2fe0d0"), crit: cvar("--crit", "#fb5b6b"), ink: cvar("--ink", "#e8ecf2"), faint: cvar("--faint", "#586372") };
       for (let i = 0; i < pts.length - 1; i++) {
         const a = pts[i], b = pts[i + 1]; const last = i === pts.length - 2;
         ctx.strokeStyle = last ? cm.crit : cm.gold; ctx.globalAlpha = 0.4; ctx.lineWidth = 1.4;
@@ -425,7 +437,7 @@ export function TraceMap({ trace, destLabel }: { trace: TraceResult | null; dest
         if (pt.h.city) ctx.fillText(pt.h.city, pt.px + 8, pt.py + 5);
         ctx.fillText(pt.h.ip, pt.px + 8, pt.py + (pt.h.city ? 15 : 5));
       });
-      if (pts.length === 0) {
+      if (pts.length === 0 && gpts.length === 0) {
         ctx.fillStyle = cm.faint; ctx.font = "12px system-ui"; ctx.textAlign = "center";
         ctx.fillText(tr?.running ? "Traceroute en cours…" : tr?.error ? `Erreur : ${tr.error}` : "Lance un tracé pour voir le chemin", W / 2, H / 2);
       }
