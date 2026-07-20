@@ -785,11 +785,12 @@ function Offensif({ airgapped, wifi }: { airgapped: boolean; wifi: { networks: W
 }
 
 /* ============ SOC LOCAL (HIDS + Mail Security) ============ */
-function Soc({ hids }: { hids: HidsResult | null }) {
+function Soc({ hids, defender }: { hids: HidsResult | null; defender: import("./api").DefenderStatus | null }) {
   const [eml, setEml] = useState("");
   const [mail, setMail] = useState<MailAnalysis | null>(null);
   const [busy, setBusy] = useState(false);
-  useEffect(() => { api.hidsRun().catch(() => {}); }, []); // lance l'analyse des événements à l'ouverture
+  useEffect(() => { api.hidsRun().catch(() => {}); api.defenderRun().catch(() => {}); }, []); // lance les analyses à l'ouverture
+  const onoff = (v: boolean | null) => (v === null ? { t: "?", c: "var(--faint)" } : v ? { t: "activée", c: "var(--safe)" } : { t: "désactivée", c: "var(--crit)" });
   const ta: React.CSSProperties = { width: "100%", background: "var(--card-solid)", border: "1px solid var(--card-b)", borderRadius: 8, color: "var(--ink)", fontFamily: "var(--mono)", fontSize: 12, padding: 10 };
   const analyze = async () => { setBusy(true); setMail(null); try { setMail(await api.mailAnalyze(eml)); } catch { setMail({ from_addr: "", from_name: "", subject: "", date: "", spf: "?", dkim: "?", dmarc: "?", links: [], attachments: [], risk: 0, severity: "safe", reasons: [], error: "moteur injoignable" }); } setBusy(false); };
   const onFile = (e: React.ChangeEvent<HTMLInputElement>) => { const f = e.target.files?.[0]; if (!f) return; const r = new FileReader(); r.onload = () => setEml(String(r.result || "")); r.readAsText(f); };
@@ -845,6 +846,26 @@ function Soc({ hids }: { hids: HidsResult | null }) {
             </div>
           ))}
           {(!hids || hids.events.length === 0) && <div className="empty">{hids?.running ? "Analyse en cours…" : "Clique « Analyser » pour lire les événements."}</div>}
+        </Card>
+        <Card title="Windows Defender" right={<button className="btn ghost" style={{ padding: "5px 10px" }} onClick={() => api.defenderRun()}>Rafraîchir</button>}>
+          <div className="note">État réel de l'antivirus Microsoft Defender + détections de menaces (lecture seule, via PowerShell).</div>
+          {!defender || defender.running ? <div className="empty">{defender?.running ? "Interrogation de Defender…" : "Chargement…"}</div>
+            : !defender.available ? <div className="empty">{defender.reason || "Defender indisponible"}</div>
+              : (
+                <>
+                  <div className="recap"><span className="ic">🛡️</span>Antivirus<span className="v" style={{ color: onoff(defender.antivirus_enabled).c }}>{onoff(defender.antivirus_enabled).t}</span></div>
+                  <div className="recap"><span className="ic">⚡</span>Protection temps réel<span className="v" style={{ color: onoff(defender.realtime_protection).c }}>{onoff(defender.realtime_protection).t}</span></div>
+                  <div className="recap"><span className="ic">🔐</span>Protection anti-altération<span className="v" style={{ color: onoff(defender.tamper_protection).c }}>{onoff(defender.tamper_protection).t}</span></div>
+                  <div className="recap"><span className="ic">🧬</span>Signatures<span className="v mono">{defender.signature_version || "?"}{defender.signature_age_days != null ? ` (${defender.signature_age_days}j)` : ""}</span></div>
+                  {defender.last_quick_scan && <div className="recap"><span className="ic">🔍</span>Dernier scan rapide<span className="v mono" style={{ fontSize: 11 }}>{defender.last_quick_scan.slice(0, 19).replace("T", " ")}</span></div>}
+                  <div style={{ padding: "8px 14px 0" }}><div className="lbl" style={{ marginBottom: 6 }}>Détections ({defender.threats.length})</div>
+                    {defender.threats.length === 0 ? <div className="disc" style={{ color: "var(--safe)", padding: 0 }}>Aucune menace détectée ✅</div>
+                      : defender.threats.slice(0, 10).map((t, i) => (
+                        <div className="log" key={i}><span className="ts">{t.time.slice(0, 19).replace("T", " ")}</span><span className="lv error">{t.severity}</span><span className="ms">{t.threat} <span className="muted">→ {t.action}</span></span></div>
+                      ))}
+                  </div>
+                </>
+              )}
         </Card>
       </div>
     </div>
@@ -983,6 +1004,7 @@ export default function App() {
   const lan = usePolling(api.lan, 20000);
   const scan = usePolling(api.scan, 4000);
   const hids = usePolling(api.hids, 8000);
+  const defender = usePolling(api.defender, 12000);
   const connectors = usePolling(api.connectors, 6000);
   const config = usePolling(api.config, 15000);
   const [traceLabel, setTraceLabel] = useState("");
@@ -1051,7 +1073,7 @@ export default function App() {
       {tab === "remediation" && <Remediation conns={conns} />}
       {tab === "recon" && <Recon lan={lan.data} scan={scan.data} onScan={(t, m) => api.scanRun(t, m)} />}
       {tab === "offensif" && <Offensif airgapped={airgapped} wifi={wifi.data} />}
-      {tab === "soc" && <Soc hids={hids.data} />}
+      {tab === "soc" && <Soc hids={hids.data} defender={defender.data} />}
       {tab === "connecteurs" && <Connecteurs airgapped={airgapped} connectors={connectors.data || []} onRefresh={() => api.connectors().then((d) => (connectors.data = d)).catch(() => {})} />}
       {tab === "diagnostic" && <Diagnostic logs={logs.data || []} history={history.data || []} timeline={timeline.data || []} beaconing={beaconing.data || []} config={config.data} />}
 

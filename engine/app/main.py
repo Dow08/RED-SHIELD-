@@ -21,6 +21,7 @@ from app.modules.base import ModuleStatus
 from app.modules.bandwidth import BandwidthModule
 from app.modules.connectors import ConnectorsModule
 from app.modules.cracker import CrackerModule, CrackRequest
+from app.modules.defender import DefenderModule
 from app.modules.intel import IntelModule
 from app.modules.llm import LlmModule
 from app.modules.osint import OsintModule
@@ -79,6 +80,7 @@ def register_modules(registry: Registry, bus: EventBus) -> None:
     registry.register(LanModule(bus))
     registry.register(ScanModule(bus))
     registry.register(HidsModule(bus))
+    registry.register(DefenderModule(bus))
     registry.register(MailModule(bus))
     connectors = ConnectorsModule(bus)
     registry.register(connectors)
@@ -256,6 +258,16 @@ def create_app() -> FastAPI:
     @app.post("/hids/run")
     def hids_run():
         module = registry.get("hids")
+        return module.run_async() if module is not None else {"ok": False, "error": "indisponible"}
+
+    @app.get("/defender")
+    def defender_get():
+        module = registry.get("defender")
+        return module.get() if module is not None else {"available": False, "reason": "module indisponible"}
+
+    @app.post("/defender/run")
+    def defender_run():
+        module = registry.get("defender")
         return module.run_async() if module is not None else {"ok": False, "error": "indisponible"}
 
     @app.post("/mail/analyze")
