@@ -159,9 +159,11 @@ function ConnRow({ c, showCols }: { c: ScoredConnection; showCols: Record<string
 }
 
 /* ============ DASHBOARD ============ */
-function Dashboard({ conns, exposure, modules, logs, bwHist, scoreHist, top, trace, beaconing, onGo, onSelect }: any) {
+function Dashboard({ conns, exposure, modules, logs, bwHist, scoreHist, top, trace, beaconing, sevFilter, onGo, onSelect }: any) {
   const risky = (conns as ScoredConnection[]).filter((c) => c.severity === "suspect" || c.severity === "crit").sort((a, b) => b.risk - a.risk);
-  const topConns = [...(conns as ScoredConnection[])].sort((a, b) => b.risk - a.risk).slice(0, 4);
+  const filtered = (conns as ScoredConnection[]).filter((c) => sevFilter[c.severity]);
+  const topConns = [...filtered].sort((a, b) => b.risk - a.risk).slice(0, 4);
+  const allActive = Object.values(sevFilter as Record<string, boolean>).every(Boolean);
   const [sub, setSub] = useState<"debit" | "top">("debit");
   const counts = exposure?.counts || { safe: 0, watch: 0, suspect: 0, crit: 0 };
   const maxTalk = Math.max(1, ...top.map((t: any) => t.connections));
@@ -208,7 +210,8 @@ function Dashboard({ conns, exposure, modules, logs, bwHist, scoreHist, top, tra
           </Card>
         </div>
 
-        <Card title="Connexions — aperçu" right={<a onClick={() => onGo("bouclier")}>{`tout voir (${conns.length}) →`}</a>}>
+        <Card title="Connexions — aperçu" right={<a onClick={() => onGo("bouclier")}>{`tout voir (${filtered.length}${allActive ? "" : "/" + conns.length}) →`}</a>}>
+          {!allActive && <div className="disc" style={{ padding: "6px 14px 0", color: "var(--accent)" }}>Filtre de sévérité actif (synchronisé avec l'onglet Bouclier).</div>}
           <div className="tscroll">
             <table>
               <thead><tr><th>Process</th><th>Distant</th><th>Risque</th><th>État</th></tr></thead>
@@ -300,8 +303,7 @@ function Dashboard({ conns, exposure, modules, logs, bwHist, scoreHist, top, tra
 }
 
 /* ============ BOUCLIER ============ */
-function Bouclier({ conns }: { conns: ScoredConnection[] }) {
-  const [active, setActive] = useState<Record<Severity, boolean>>({ safe: true, watch: true, suspect: true, crit: true });
+function Bouclier({ conns, active, setActive }: { conns: ScoredConnection[]; active: Record<Severity, boolean>; setActive: (v: Record<Severity, boolean>) => void }) {
   const [cols, setCols] = useState<Record<string, boolean>>({ risk: true, geo: true, port: true, dns: true });
   const [q, setQ] = useState("");
   const [desc, setDesc] = useState(true);
@@ -544,7 +546,7 @@ function Recon({ wifi, lan, scan, onScan }: { wifi: { networks: WifiNet[]; messa
           {scan && scan.hosts.length > 0 && <ScanAiButton scan={scan} />}
         </Card>
         <Card title="Audit WiFi — alternative aircrack" right="natif Windows">
-          <div className="note">Audit réel des réseaux à portée (chiffrement, signal). La <b>capture/crack de handshake</b> (aircrack) reste Linux + carte monitor (Jalon 4).</div>
+          <div className="note">Audit réel des réseaux à portée (chiffrement, signal). La <b>capture/crack de handshake</b> (aircrack) reste réservée à Linux + carte en mode monitor.</div>
           {wifi?.message && <div className="empty">{wifi.message}</div>}
           {nets.map((n) => (
             <div className="row" key={n.bssid || n.ssid}>
@@ -567,7 +569,7 @@ function Recon({ wifi, lan, scan, onScan }: { wifi: { networks: WifiNet[]; messa
         </Card>
       </div>
       <div className="col">
-        <Card title="WiFi offensif (aircrack)" right="Jalon 4 · Linux">
+        <Card title="WiFi offensif (aircrack)" right="Linux requis">
           <div className="note"><b>Linux uniquement</b> · carte monitor requise · cible autorisée obligatoire. Sous Windows, utilise l'<b>Audit WiFi</b> ci-contre.</div>
           <div className="row"><span className="nm">Interface monitor</span><span className="ds">non disponible (Windows)</span><span className="stt off" style={{ marginLeft: "auto" }}>indisponible</span></div>
         </Card>
@@ -654,8 +656,8 @@ function Offensif({ airgapped }: { airgapped: boolean }) {
       </div>
       <div className="col">
         <OsintCard airgapped={airgapped} />
-        <Card title="Suggestions d'attaque" right="Jalon 3">
-          <div className="note">La logique de <b>sk-recon</b> (suggestions hydra/netexec/feroxbuster selon les services) sera greffée sur le scan nmap au Jalon 3.</div>
+        <Card title="Suggestions d'attaque" right="intégré au scan">
+          <div className="note">La logique <b>sk-recon</b> (hydra/netexec/feroxbuster selon les services) est <b>déjà greffée sur le scan nmap</b> — vois les « Pistes » sous chaque port dans l'onglet <b>Recon</b>.</div>
         </Card>
       </div>
     </div>
@@ -830,15 +832,17 @@ const TABS: [string, string, string?][] = [
   ["bouclier", "Bouclier"],
   ["carte", "Carte réseau"],
   ["remediation", "Remédiation"],
-  ["recon", "Recon & WiFi", "J3-J4"],
+  ["recon", "Recon & WiFi"],
   ["offensif", "Offensif"],
   ["soc", "SOC local"],
-  ["connecteurs", "Connecteurs", "J2"],
+  ["connecteurs", "Connecteurs"],
   ["diagnostic", "Diagnostic"],
 ];
 
 export default function App() {
   const [tab, setTab] = useState("dashboard");
+  const [showAirgapHelp, setShowAirgapHelp] = useState(false);
+  const [sevFilter, setSevFilter] = useState<Record<Severity, boolean>>({ safe: true, watch: true, suspect: true, crit: true });
   const health = usePolling(api.health, 10000);
   const modules = usePolling(api.modules, 5000);
   const exposure = usePolling(api.exposure, 3000);
@@ -881,17 +885,33 @@ export default function App() {
     <div className="wrap">
       <div className="top">
         <div className="brand">
-          <div className="logo" aria-hidden><svg viewBox="0 0 24 24" fill="none"><path d="M12 2l8 3v6c0 5-3.4 8.4-8 11-4.6-2.6-8-6-8-11V5l8-3z" fill="#fff" fillOpacity=".95" /><path d="M12 7v6M9 10h6" stroke="#7d1d24" strokeWidth="1.7" strokeLinecap="round" /></svg></div>
-          <div><h1>RED</h1><div className="sub">Network Shield &amp; Recon</div></div>
+          <div className="logo" aria-hidden style={{ background: "transparent", boxShadow: "none", width: 40, height: 40 }}>
+            <svg viewBox="0 0 48 48" width="40" height="40" fill="none">
+              <defs>
+                <linearGradient id="rslogo" x1="4" y1="2" x2="44" y2="46" gradientUnits="userSpaceOnUse">
+                  <stop offset="0" stopColor="#2fe0d0" /><stop offset="1" stopColor="#7c9cff" />
+                </linearGradient>
+              </defs>
+              <path d="M24 2.5 L41.5 8.5 V22.5 C41.5 34 33.5 41.5 24 46 C14.5 41.5 6.5 34 6.5 22.5 V8.5 Z" fill="#070c12" stroke="url(#rslogo)" strokeWidth="2" />
+              <g stroke="url(#rslogo)" strokeWidth="1.1" opacity="0.5"><circle cx="24" cy="23" r="6.5" /><circle cx="24" cy="23" r="11" /></g>
+              <g strokeWidth="1.4" opacity="0.95">
+                <line x1="24" y1="23" x2="24" y2="11.5" stroke="#7c9cff" /><line x1="24" y1="23" x2="33.5" y2="28.5" stroke="#2fe0d0" /><line x1="24" y1="23" x2="15" y2="29.5" stroke="#fb5b6b" />
+              </g>
+              <circle cx="24" cy="23" r="2.6" fill="#2fe0d0" /><circle cx="24" cy="11.5" r="1.7" fill="#7c9cff" /><circle cx="33.5" cy="28.5" r="1.7" fill="#2fe0d0" /><circle cx="15" cy="29.5" r="1.9" fill="#fb5b6b" />
+              <path d="M8.5 19.5 H39.5" stroke="url(#rslogo)" strokeWidth="0.9" opacity="0.28" />
+            </svg>
+          </div>
+          <div><h1>RED <span style={{ color: "var(--accent)" }}>SHIELD</span></h1><div className="sub">Network Shield &amp; Recon</div></div>
         </div>
         <div className="gm"><div className="num" style={{ color: bandColor(exposure.data?.band ?? "faible") }}>{exposure.data?.score ?? "—"}</div><div><div className="lab">Exposition</div><div className="band" style={{ color: bandColor(exposure.data?.band ?? "faible") }}>{exposure.data ? bandLabel(exposure.data.band).replace("Exposition ", "") : "…"}</div></div></div>
         <div className="bw"><span><span className="k">↓ DL</span> <span className="dl mono">{fr(bwLast?.d ?? 0)}</span> <span className="k">Mo/s</span></span><span><span className="k">↑ UL</span> <span className="ul mono">{fr(bwLast?.u ?? 0)}</span> <span className="k">Mo/s</span></span></div>
         <div className="spacer"></div>
         <ThemeSelector />
-        <div className={`pill ${airgapped ? "" : "off"}`} style={{ cursor: "pointer" }} onClick={async () => { await api.setAirgapped(!airgapped); }} title="Mode air-gapped : coupe TOUT appel réseau externe (VirusTotal, OSINT, LLM…). Les analyses restent 100 % locales. Clique pour activer/désactiver — désactive-le pour utiliser les connecteurs.">
+        <div className={`pill ${airgapped ? "" : "off"}`} style={{ cursor: "pointer" }} onClick={async () => { await api.setAirgapped(!airgapped); }} title="Cliquer pour activer/désactiver le mode air-gapped">
           <span className="on"></span>Air-gapped&nbsp;<b>{airgapped ? "ACTIF" : "OFF"}</b>
           <span style={{ marginLeft: 6, color: "var(--faint)" }}>⇄</span>
         </div>
+        <button className="pill" style={{ cursor: "pointer", padding: "7px 11px", fontWeight: 700 }} title="C'est quoi le mode air-gapped ?" onClick={() => setShowAirgapHelp(true)}>?</button>
       </div>
 
       {offline && <div className="note" style={{ borderRadius: 12, marginBottom: 12 }}>⚠️ Moteur injoignable sur <b>127.0.0.1:8787</b>. Lance le backend : <span className="mono">py -m uvicorn app.main:app</span> (depuis <span className="mono">engine/</span>).</div>}
@@ -902,8 +922,8 @@ export default function App() {
         ))}
       </div>
 
-      {tab === "dashboard" && <Dashboard conns={conns} exposure={exposure.data} modules={mods} logs={logs.data || []} bwHist={bwHist} scoreHist={scoreHist} top={top.data || []} trace={trace.data} beaconing={beaconing.data || []} onGo={setTab} onSelect={selectEndpoint} />}
-      {tab === "bouclier" && <Bouclier conns={conns} />}
+      {tab === "dashboard" && <Dashboard conns={conns} exposure={exposure.data} modules={mods} logs={logs.data || []} bwHist={bwHist} scoreHist={scoreHist} top={top.data || []} trace={trace.data} beaconing={beaconing.data || []} sevFilter={sevFilter} onGo={setTab} onSelect={selectEndpoint} />}
+      {tab === "bouclier" && <Bouclier conns={conns} active={sevFilter} setActive={setSevFilter} />}
       {tab === "carte" && <CarteReseau conns={conns} trace={trace.data} traceLabel={traceLabel} onRun={runTrace} onSelect={selectEndpoint} />}
       {tab === "remediation" && <Remediation conns={conns} />}
       {tab === "recon" && <Recon wifi={wifi.data} lan={lan.data} scan={scan.data} onScan={(t, m) => api.scanRun(t, m)} />}
@@ -912,7 +932,22 @@ export default function App() {
       {tab === "connecteurs" && <Connecteurs airgapped={airgapped} connectors={connectors.data || []} onRefresh={() => api.connectors().then((d) => (connectors.data = d)).catch(() => {})} />}
       {tab === "diagnostic" && <Diagnostic logs={logs.data || []} history={history.data || []} timeline={timeline.data || []} beaconing={beaconing.data || []} />}
 
-      <div className="foot">RED · Network Shield &amp; Recon · analyses 100 % locales, données réelles (aucune inventée)</div>
+      <div className="foot">RED SHIELD · Network Shield &amp; Recon · analyses 100 % locales, données réelles (aucune inventée)</div>
+
+      {showAirgapHelp && (
+        <div onClick={() => setShowAirgapHelp(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 200, display: "grid", placeItems: "center", padding: 20 }}>
+          <div className="card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 540, backdropFilter: "blur(20px)" }}>
+            <div className="card-h"><h2>🛡️ Le mode « Air-gapped » en clair</h2></div>
+            <div style={{ padding: 18, fontSize: 13.5, lineHeight: 1.65, color: "var(--soft)" }}>
+              <p style={{ margin: "0 0 10px" }}><b style={{ color: "var(--ink)" }}>« Air-gapped »</b> veut dire « isolé du réseau ». Quand le mode est <b style={{ color: "var(--safe)" }}>ACTIF</b> (par défaut), RED Shield <b style={{ color: "var(--ink)" }}>n'envoie aucune de tes données vers Internet</b> : toutes les analyses restent <b>sur ta machine</b>. Aucune IP, aucun mail, aucun résultat de scan n'est transmis à un service extérieur.</p>
+              <p style={{ margin: "0 0 10px" }}><b style={{ color: "var(--ink)" }}>Pourquoi ?</b> Pour garantir la confidentialité — indispensable en mission, où l'on n'a souvent pas le droit d'envoyer des infos sur une cible à des tiers.</p>
+              <p style={{ margin: "0 0 10px" }}><b style={{ color: "var(--ink)" }}>Quand le désactiver ?</b> Uniquement pour enrichir une analyse via un service en ligne (réputation d'IP VirusTotal, OSINT, LLM distant…). Il faut alors ajouter tes clés dans l'onglet <b>Connecteurs</b>. Un LLM <b>Ollama local</b> fonctionne même en air-gapped.</p>
+              <p style={{ margin: "0 0 14px", color: "var(--accent)" }}>👉 En cas de doute, laisse-le <b>ACTIF</b> (sécurité maximale).</p>
+              <button className="btn" onClick={() => setShowAirgapHelp(false)}>Compris</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
