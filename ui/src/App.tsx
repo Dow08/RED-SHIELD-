@@ -640,8 +640,11 @@ function ScanAiButton({ scan }: { scan: ScanResult }) {
 }
 
 /* ============ RECON ============ */
-function Recon({ lan, scan, onScan }: { lan: LanDevice[] | null; scan: ScanResult | null; onScan: (t: string, m: string) => void }) {
+function Recon({ lan, scan, procvuln, onScan }: { lan: LanDevice[] | null; scan: ScanResult | null; procvuln: import("./api").ProcVulnResult | null; onScan: (t: string, m: string) => void }) {
   const devices = lan || [];
+  const pv = procvuln;
+  const withCve = (pv?.apps || []).filter((a) => a.cves.length > 0);
+  useEffect(() => { api.procvulnRun().catch(() => {}); }, []);
   const [target, setTarget] = useState("scanme.nmap.org");
   const [mode, setMode] = useState("discret");
   const [help, setHelp] = useState("");
@@ -713,6 +716,24 @@ function Recon({ lan, scan, onScan }: { lan: LanDevice[] | null; scan: ScanResul
             </div>
           ))}
           {devices.length === 0 && <div className="empty">Aucun voisin dans le cache ARP (ping le réseau pour le peupler).</div>}
+        </Card>
+        <Card title="CVE des applications locales" right={<><span style={{ marginRight: 8, color: withCve.length ? "var(--crit)" : "var(--safe)" }}>{withCve.length} vulnérable(s)</span><button className="btn ghost" style={{ padding: "5px 10px" }} onClick={() => api.procvulnRun()}>Analyser</button></>}>
+          <div className="note">Croise le <b>produit + version réels</b> de tes applications avec connexions (métadonnées de l'exécutable) contre la base CVE locale. Factuel : « aucune CVE » = rien dans la base locale, pas une garantie d'absence de faille.</div>
+          {pv?.note && <div className="disc" style={{ padding: "6px 16px" }}>ℹ️ {pv.note}</div>}
+          {!pv || pv.running ? <div className="empty">{pv?.running ? "Analyse des applications…" : "Chargement…"}</div>
+            : (pv.apps.length === 0 ? <div className="empty">Aucune application avec connexion détectée.</div>
+              : (
+                <>
+                  {withCve.map((a, i) => (
+                    <div className="rcard" key={i} style={{ borderLeft: "3px solid var(--crit)" }}>
+                      <div className="rhead"><span className="pr c">CVE</span><span className="rtitle" style={{ fontSize: 13 }}>{a.process} <span className="muted" style={{ fontWeight: 400 }}>{a.product} {a.version}</span></span></div>
+                      <div className="rmeta">{a.cves.map((c) => <a key={c.cve} className="badge m" href={c.url} target="_blank" rel="noopener">{c.cve} · {c.cvss} ↗</a>)}</div>
+                    </div>
+                  ))}
+                  {withCve.length === 0 && <div className="disc" style={{ color: "var(--safe)", padding: "8px 16px" }}>Aucune CVE connue dans la base locale pour les {pv.scanned} application(s) analysée(s) ✅</div>}
+                  <div className="disc" style={{ padding: "6px 16px 12px" }}>{pv.scanned} application(s) analysée(s) · {withCve.length} avec CVE connue.</div>
+                </>
+              ))}
         </Card>
       </div>
     </div>
@@ -1043,6 +1064,7 @@ export default function App() {
   const beaconing = usePolling(api.beaconing, 10000);
   const lan = usePolling(api.lan, 20000);
   const scan = usePolling(api.scan, 4000);
+  const procvuln = usePolling(api.procvuln, 10000);
   const hids = usePolling(api.hids, 8000);
   const defender = usePolling(api.defender, 12000);
   const connectors = usePolling(api.connectors, 6000);
@@ -1111,7 +1133,7 @@ export default function App() {
       {tab === "bouclier" && <Bouclier conns={conns} active={sevFilter} setActive={setSevFilter} />}
       {tab === "carte" && <CarteReseau conns={conns} listeners={listeners.data || []} trace={trace.data} traceLabel={traceLabel} geoPoints={geoPoints.data || []} onRun={runTrace} onSelect={selectEndpoint} />}
       {tab === "remediation" && <Remediation conns={conns} metrics={metrics.data} listeners={listeners.data || []} />}
-      {tab === "recon" && <Recon lan={lan.data} scan={scan.data} onScan={(t, m) => api.scanRun(t, m)} />}
+      {tab === "recon" && <Recon lan={lan.data} scan={scan.data} procvuln={procvuln.data} onScan={(t, m) => api.scanRun(t, m)} />}
       {tab === "offensif" && <Offensif airgapped={airgapped} wifi={wifi.data} />}
       {tab === "soc" && <Soc hids={hids.data} defender={defender.data} />}
       {tab === "connecteurs" && <Connecteurs airgapped={airgapped} connectors={connectors.data || []} onRefresh={() => api.connectors().then((d) => (connectors.data = d)).catch(() => {})} />}

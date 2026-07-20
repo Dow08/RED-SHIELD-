@@ -64,6 +64,9 @@ export interface Compliance { framework: string; control: string; note: string; 
 export interface ScanPort { port: number; protocol: string; state: string; service: string; product: string; version: string; cves: ScanCve[]; osi_layer: number; osi_label: string; compliance: Compliance[]; suggestions: string[]; }
 export interface ScanHost { ip: string; hostname: string; os: string; ports: ScanPort[]; }
 export interface ScanResult { target: string; mode: string; hosts: ScanHost[]; running: boolean; error: string | null; nmap_available: boolean; }
+export interface ProcCve { cve: string; cvss: number; severity: string; summary: string; url: string; }
+export interface ProcVuln { process: string; pid: number | null; exe: string; product: string; version: string; cves: ProcCve[]; }
+export interface ProcVulnResult { apps: ProcVuln[]; scanned: number; running: boolean; available: boolean; note: string; }
 export interface HidsEvent { ts: string; log: string; event_id: number; severity: string; label: string; message: string; }
 export interface HidsResult { events: HidsEvent[]; running: boolean; available: boolean; note: string; }
 export interface MailLink { url: string; suspicious: boolean; reason: string; }
@@ -123,6 +126,8 @@ export const api = {
   firewallRules: () => get<string[]>("/firewall/rules"),
   scan: () => get<ScanResult>("/scan"),
   scanRun: (target: string, mode: string) => post<{ ok: boolean; error?: string }>("/scan/run", { target, mode }),
+  procvuln: () => get<ProcVulnResult>("/procvuln"),
+  procvulnRun: () => post<{ ok: boolean; error?: string }>("/procvuln/run", {}),
   hids: () => get<HidsResult>("/hids"),
   hidsRun: () => post<{ ok: boolean; error?: string }>("/hids/run", {}),
   defender: () => get<DefenderStatus>("/defender"),

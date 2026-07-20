@@ -32,6 +32,7 @@ from app.modules.lan import LanModule
 from app.modules.mail import MailModule, MailRequest
 from app.modules.diagnostic import DiagnosticModule
 from app.modules.persistence import PersistenceModule
+from app.modules.procvuln import ProcVulnModule
 from app.modules.scan import ScanModule, ScanRequest
 from app.modules.scoring import ScoringModule
 from app.modules.shield import ShieldModule
@@ -79,6 +80,7 @@ def register_modules(registry: Registry, bus: EventBus) -> None:
     registry.register(FirewallModule(bus))
     registry.register(LanModule(bus))
     registry.register(ScanModule(bus))
+    registry.register(ProcVulnModule(bus))
     registry.register(HidsModule(bus))
     registry.register(DefenderModule(bus))
     registry.register(MailModule(bus))
@@ -259,6 +261,16 @@ def create_app() -> FastAPI:
         if persist is not None and persist.health() == ModuleStatus.ACTIVE and result.get("ok"):
             persist.add_audit("scan", f"{req.target} ({req.mode})")
         return result
+
+    @app.get("/procvuln")
+    def procvuln_get():
+        module = registry.get("procvuln")
+        return module.get() if module is not None else {"available": False}
+
+    @app.post("/procvuln/run")
+    def procvuln_run():
+        module = registry.get("procvuln")
+        return module.run_async() if module is not None else {"ok": False, "error": "indisponible"}
 
     @app.get("/hids")
     def hids_get():
