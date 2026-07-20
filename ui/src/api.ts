@@ -74,6 +74,8 @@ export interface MailAttachment { filename: string; risky: boolean; }
 export interface MailAnalysis { from_addr: string; from_name: string; subject: string; date: string; spf: string; dkim: string; dmarc: string; links: MailLink[]; attachments: MailAttachment[]; risk: number; severity: string; reasons: string[]; error: string | null; }
 export interface DefenderThreat { time: string; threat: string; severity: string; action: string; resource: string; }
 export interface DefenderStatus { available: boolean; reason: string; antivirus_enabled: boolean | null; realtime_protection: boolean | null; antispyware_enabled: boolean | null; tamper_protection: boolean | null; signature_version: string; signature_age_days: number | null; last_quick_scan: string; last_full_scan: string; threats: DefenderThreat[]; running: boolean; }
+export interface ImapMail { uid: string; from_addr: string; subject: string; date: string; spf: string; dkim: string; dmarc: string; risk: number; severity: string; reasons: string[]; }
+export interface ImapResult { available: boolean; reason: string; error: string; checked: number; suspicious: number; mails: ImapMail[]; }
 export interface ConnectorStatus { name: string; connected: boolean; }
 export interface IntelResult { available: boolean; reason?: string; ip?: string; sources: Record<string, unknown>[]; }
 export interface OsintResult { available: boolean; reason?: string; error?: string; domain?: string; subdomains: string[]; }
@@ -133,6 +135,8 @@ export const api = {
   defender: () => get<DefenderStatus>("/defender"),
   defenderRun: () => post<{ ok: boolean; error?: string }>("/defender/run", {}),
   mailAnalyze: (eml: string) => post<MailAnalysis>("/mail/analyze", { eml }),
+  imapStatus: () => get<{ configured: boolean; airgapped: boolean; host: string; username: string }>("/imap/status"),
+  imapCheck: () => get<ImapResult>("/imap/check"),
   config: () => get<{ airgapped: boolean; purge_on_exit: boolean; storage_budget_go: number; sample_interval: number }>("/config"),
   setAirgapped: (airgapped: boolean) => post<{ airgapped: boolean }>("/config/airgapped", { airgapped }),
   connectors: () => get<ConnectorStatus[]>("/connectors"),

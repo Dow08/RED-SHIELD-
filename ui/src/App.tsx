@@ -849,7 +849,11 @@ function Soc({ hids, defender }: { hids: HidsResult | null; defender: import("./
   const [eml, setEml] = useState("");
   const [mail, setMail] = useState<MailAnalysis | null>(null);
   const [busy, setBusy] = useState(false);
-  useEffect(() => { api.hidsRun().catch(() => {}); api.defenderRun().catch(() => {}); }, []); // lance les analyses à l'ouverture
+  const [imapRes, setImapRes] = useState<import("./api").ImapResult | null>(null);
+  const [imapBusy, setImapBusy] = useState(false);
+  const [imapCfg, setImapCfg] = useState<{ configured: boolean; airgapped: boolean } | null>(null);
+  useEffect(() => { api.hidsRun().catch(() => {}); api.defenderRun().catch(() => {}); api.imapStatus().then(setImapCfg).catch(() => {}); }, []); // lance les analyses à l'ouverture
+  const relever = async () => { setImapBusy(true); try { setImapRes(await api.imapCheck()); } catch { setImapRes(null); } setImapBusy(false); };
   const onoff = (v: boolean | null) => (v === null ? { t: "?", c: "var(--faint)" } : v ? { t: "activée", c: "var(--safe)" } : { t: "désactivée", c: "var(--crit)" });
   const ta: React.CSSProperties = { width: "100%", background: "var(--card-solid)", border: "1px solid var(--card-b)", borderRadius: 8, color: "var(--ink)", fontFamily: "var(--mono)", fontSize: 12, padding: 10 };
   const analyze = async () => { setBusy(true); setMail(null); try { setMail(await api.mailAnalyze(eml)); } catch { setMail({ from_addr: "", from_name: "", subject: "", date: "", spf: "?", dkim: "?", dmarc: "?", links: [], attachments: [], risk: 0, severity: "safe", reasons: [], error: "moteur injoignable" }); } setBusy(false); };
@@ -891,6 +895,27 @@ function Soc({ hids, defender }: { hids: HidsResult | null; defender: import("./
               label="🤖 Approfondir avec l'IA"
               getText={() => `Email de "${mail.from_name}" <${mail.from_addr}>, objet "${mail.subject}". Auth: SPF=${mail.spf} DKIM=${mail.dkim} DMARC=${mail.dmarc}. Score ${mail.risk}/100 (${mail.severity}). Anomalies: ${mail.reasons.join(" ; ") || "aucune"}. Liens: ${mail.links.map((l) => l.url).join(", ") || "aucun"}. Pièces jointes: ${mail.attachments.map((a) => a.filename).join(", ") || "aucune"}.`}
             />
+          )}
+        </Card>
+        <Card title="Surveillance mail (IMAP)" right={<button className="btn ghost" style={{ padding: "5px 10px" }} disabled={imapBusy || (imapCfg ? !imapCfg.configured || imapCfg.airgapped : false)} onClick={relever}>{imapBusy ? "Relève…" : "Relever la boîte"}</button>}>
+          <div className="note">Analyse automatique des derniers mails de ta boîte via <b>IMAP</b> (configuré dans Connecteurs). Lecture seule, mot de passe d'application chiffré en keyring.</div>
+          {imapCfg && !imapCfg.configured && <div className="empty">Boîte IMAP non configurée — va dans <b>Connecteurs</b>.</div>}
+          {imapCfg && imapCfg.configured && imapCfg.airgapped && <div className="disc" style={{ padding: "8px 16px", color: "var(--watch)" }}>⚠️ Air-gapped actif — désactive-le (pastille en haut) pour relever la boîte.</div>}
+          {imapRes?.reason && <div className="empty">{imapRes.reason}</div>}
+          {imapRes?.error && <div className="empty" style={{ color: "var(--crit)" }}>Erreur : {imapRes.error}</div>}
+          {imapRes?.available && !imapRes.error && (
+            <>
+              {imapRes.suspicious > 0
+                ? <div className="note" style={{ background: "rgba(251,91,107,0.12)", borderColor: "var(--crit)" }}>🚨 <b>{imapRes.suspicious} mail(s) suspect(s)</b> détecté(s) sur {imapRes.checked} analysé(s) — vérifie ci-dessous avant toute action.</div>
+                : <div className="disc" style={{ color: "var(--safe)", padding: "8px 16px" }}>✅ {imapRes.checked} mail(s) analysé(s), aucun suspect.</div>}
+              {imapRes.mails.filter((m) => m.severity !== "safe").map((m, i) => (
+                <div className="rcard" key={i} style={{ borderLeft: `3px solid ${m.severity === "crit" ? "var(--crit)" : "var(--watch)"}` }}>
+                  <div className="rhead"><span className="pr" style={{ color: m.severity === "crit" ? "var(--crit)" : "var(--watch)", borderColor: m.severity === "crit" ? "var(--crit)" : "var(--watch)", background: "transparent" }}>{m.severity.toUpperCase()} · {m.risk}/100</span><span className="rtitle" style={{ fontSize: 12.5 }}>{m.subject || "(sans objet)"}</span></div>
+                  <div className="rbody" style={{ fontSize: 12 }}><b>De :</b> {m.from_addr} · SPF {m.spf} · DKIM {m.dkim} · DMARC {m.dmarc}</div>
+                  {m.reasons.length > 0 && <div className="rbody" style={{ fontSize: 12 }}>{m.reasons.join(" ; ")}</div>}
+                </div>
+              ))}
+            </>
           )}
         </Card>
       </div>
@@ -944,6 +969,9 @@ function Connecteurs({ airgapped, connectors, onRefresh }: { airgapped: boolean;
   const saveLlm = async () => { await api.connectorSet("llm", JSON.stringify(llm)); onRefresh(); };
   const saveSiem = async () => { await api.connectorSet("siem", JSON.stringify(siem)); onRefresh(); setSiemMsg("Enregistré."); };
   const testSiem = async () => { setSiemMsg("Test…"); try { const r = await api.siemTest(); setSiemMsg(r.reason || (r.ok ? `Connexion OK (HTTP ${r.status_code})` : (r.error || `HTTP ${r.status_code}`))); } catch { setSiemMsg("échec"); } };
+  const [imap, setImap] = useState({ host: "", port: 993, username: "", password: "" });
+  const [imapMsg, setImapMsg] = useState("");
+  const saveImap = async () => { await api.connectorSet("imap", JSON.stringify(imap)); onRefresh(); setImap({ ...imap, password: "" }); setImapMsg("Enregistré — surveillance active dans l'onglet SOC (air-gapped OFF requis)."); };
   const simple: [string, string][] = [["virustotal", "VirusTotal"], ["abuseipdb", "AbuseIPDB"], ["greynoise", "GreyNoise"], ["shodan", "Shodan"]];
   return (
     <Card title="Connecteurs — clés API" right="chiffrées (keyring OS)">
@@ -981,6 +1009,19 @@ function Connecteurs({ airgapped, connectors, onRefresh }: { airgapped: boolean;
       </div>
       {siemMsg && <div className="disc" style={{ padding: "0 16px 10px", color: "var(--accent)" }}>{siemMsg}</div>}
       <div className="disc" style={{ padding: "0 16px 14px" }}>Formats supportés : Wazuh (API REST), Elasticsearch (_search), ou tout endpoint JSON renvoyant une liste d'alertes. Les alertes rapatriées apparaissent dans le SOC.</div>
+
+      <div className="card-h" style={{ marginTop: 4 }}><h2>Surveillance mail (IMAP)</h2></div>
+      <div className="note">Analyse automatique de tes derniers mails (SPF/DKIM/DMARC, liens, pièces jointes) → alerte phishing/ransomware dans le <b>SOC</b>. Utilise un <b>mot de passe d'application</b> (jamais ton mot de passe principal), chiffré en keyring, jamais réaffiché. Lecture seule. Nécessite <b>air-gapped OFF</b>.</div>
+      <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
+        <span className="nm">IMAP</span>
+        <input className="key" style={{ letterSpacing: 0, width: 190 }} value={imap.host} onChange={(e) => setImap({ ...imap, host: e.target.value })} placeholder="serveur (ex. imap.gmail.com)" />
+        <input className="key" type="number" style={{ letterSpacing: 0, width: 80 }} value={imap.port} onChange={(e) => setImap({ ...imap, port: +e.target.value })} placeholder="993" />
+        <input className="key" style={{ letterSpacing: 0, width: 180 }} value={imap.username} onChange={(e) => setImap({ ...imap, username: e.target.value })} placeholder="adresse mail" />
+        <input className="key" type="password" style={{ width: 160 }} value={imap.password} onChange={(e) => setImap({ ...imap, password: e.target.value })} placeholder="mot de passe d'application" />
+        <button className="btn ghost" disabled={!imap.host.trim() || !imap.username.trim() || !imap.password.trim()} onClick={saveImap}>Enregistrer</button>
+        {connected("imap") ? <><span className="stt on">configuré ✓</span><button className="btn ghost" onClick={() => del("imap")}>Supprimer</button></> : <span className="stt off">non configuré</span>}
+      </div>
+      {imapMsg && <div className="disc" style={{ padding: "0 16px 14px", color: "var(--accent)" }}>{imapMsg}</div>}
     </Card>
   );
 }

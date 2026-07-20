@@ -28,6 +28,7 @@ from app.modules.osint import OsintModule
 from app.runtime import runtime
 from app.modules.firewall import FirewallModule, FwRequest, FwPortRequest
 from app.modules.hids import HidsModule
+from app.modules.imapmail import ImapMailModule
 from app.modules.lan import LanModule
 from app.modules.mail import MailModule, MailRequest
 from app.modules.diagnostic import DiagnosticModule
@@ -84,11 +85,13 @@ def register_modules(registry: Registry, bus: EventBus) -> None:
     registry.register(ProcVulnModule(bus))
     registry.register(HidsModule(bus))
     registry.register(DefenderModule(bus))
-    registry.register(MailModule(bus))
+    mail = MailModule(bus)
+    registry.register(mail)
     connectors = ConnectorsModule(bus)
     registry.register(connectors)
     registry.register(IntelModule(bus, connectors))
     registry.register(SiemModule(bus, connectors))
+    registry.register(ImapMailModule(bus, connectors, mail))
     registry.register(OsintModule(bus))
     registry.register(LlmModule(bus, connectors))
     registry.register(AnalyticsModule(bus, shield, scoring))
@@ -297,6 +300,16 @@ def create_app() -> FastAPI:
     @app.post("/mail/analyze")
     def mail_analyze(req: MailRequest):
         return _require("mail").analyze(req.eml)
+
+    @app.get("/imap/status")
+    def imap_status():
+        module = registry.get("imapmail")
+        return module.status() if module is not None else {"configured": False}
+
+    @app.get("/imap/check")
+    def imap_check(limit: int = 15):
+        module = registry.get("imapmail")
+        return module.check(limit=limit) if module is not None else {"available": False, "reason": "indisponible"}
 
     @app.get("/connectors")
     def connectors_status():
