@@ -42,6 +42,8 @@ export interface Exposure {
 }
 
 export interface Bandwidth { down_bps: number; up_bps: number; down_mo_s: number; up_mo_s: number; }
+export interface ProcThroughput { pid: number; process: string; down_bps: number; up_bps: number; down_mo_s: number; up_mo_s: number; }
+export interface ThroughputStatus { available: boolean; admin: boolean; platform_ok: boolean; pktmon_present: boolean; capturing: boolean; reason: string; inbound_packets: number; packets_seen: number; }
 export interface ModuleInfo { name: string; version: string; description: string; status: string; message: string; }
 export interface TopTalker { pid: number; process: string; connections: number; }
 export interface LogEntry { ts: string; level: string; module: string; message: string; }
@@ -89,6 +91,8 @@ export const api = {
   listeners: () => get<Listener[]>("/shield/listeners"),
   metrics: () => get<NetMetrics>("/shield/metrics"),
   bandwidth: () => get<Bandwidth>("/bandwidth"),
+  throughputStatus: () => get<ThroughputStatus>("/throughput/status"),
+  throughputProcesses: () => get<ProcThroughput[]>("/throughput/processes"),
   exposure: () => get<Exposure>("/exposure"),
   logs: (level?: string) => get<LogEntry[]>("/diagnostic/logs" + (level ? `?level=${level}` : "")),
   history: () => get<Snapshot[]>("/history"),

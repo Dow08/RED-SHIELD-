@@ -34,6 +34,7 @@ from app.modules.persistence import PersistenceModule
 from app.modules.scan import ScanModule, ScanRequest
 from app.modules.scoring import ScoringModule
 from app.modules.shield import ShieldModule
+from app.modules.throughput import ThroughputModule
 from app.modules.trace import TraceModule
 from app.modules.wifi import WifiModule
 from app.report.markdown import build_markdown
@@ -67,6 +68,7 @@ def register_modules(registry: Registry, bus: EventBus) -> None:
     shield = ShieldModule(bus)
     registry.register(shield)
     registry.register(BandwidthModule(bus))
+    registry.register(ThroughputModule(bus))
     scoring = ScoringModule(bus)
     registry.register(scoring)
     registry.register(PersistenceModule(bus))
@@ -163,6 +165,16 @@ def create_app() -> FastAPI:
     @app.get("/bandwidth")
     def bandwidth():
         return _require("bandwidth").get_rates()
+
+    @app.get("/throughput/status")
+    def throughput_status():
+        module = registry.get("throughput")
+        return module.status() if module is not None else {"available": False, "reason": "module indisponible"}
+
+    @app.get("/throughput/processes")
+    def throughput_processes():
+        module = registry.get("throughput")
+        return module.processes() if module is not None else []
 
     @app.get("/exposure")
     def exposure():

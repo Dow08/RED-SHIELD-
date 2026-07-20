@@ -173,8 +173,12 @@ function DualBar({ a, b, ca, cb }: { a: number; b: number; ca: string; cb: strin
 function Mtile({ label, children }: { label: string; children: React.ReactNode }) {
   return <div className="mtile"><div className="lbl">{label}</div>{children}</div>;
 }
-function Dashboard({ conns, exposure, metrics, modules, logs, bwHist, scoreHist, top, trace, beaconing, sevFilter, onGo, onSelect }: any) {
+function Dashboard({ conns, exposure, metrics, modules, logs, bwHist, scoreHist, top, thrStatus, thrProcs, trace, beaconing, sevFilter, onGo, onSelect }: any) {
   const m = metrics as import("./api").NetMetrics | undefined;
+  const thr = thrStatus as import("./api").ThroughputStatus | undefined;
+  const procs = (thrProcs || []) as import("./api").ProcThroughput[];
+  const liveThr = !!thr?.available && procs.length > 0;
+  const maxThr = Math.max(0.001, ...procs.map((p) => p.down_bps + p.up_bps));
   const risky = (conns as ScoredConnection[]).filter((c) => c.severity === "suspect" || c.severity === "crit").sort((a, b) => b.risk - a.risk);
   const filtered = (conns as ScoredConnection[]).filter((c) => sevFilter[c.severity]);
   const topConns = [...filtered].sort((a, b) => b.risk - a.risk).slice(0, 4);
@@ -211,15 +215,30 @@ function Dashboard({ conns, exposure, metrics, modules, logs, bwHist, scoreHist,
               <div className="stage"><BandwidthChart history={bwHist} /></div>
             ) : (
               <div className="bars">
-                {top.length === 0 && <div className="empty">Aucune donnée</div>}
-                {top.map((t: any) => (
-                  <div className="barrow" key={t.pid}>
-                    <span className="bn">{t.process}</span>
-                    <span className="track"><span className="fill" style={{ width: `${(t.connections / maxTalk) * 100}%` }} /></span>
-                    <span className="bv">{t.connections} conn.</span>
-                  </div>
-                ))}
-                <div className="disc">Processus classés par nombre de connexions actives.</div>
+                {liveThr ? (
+                  <>
+                    {procs.map((p) => (
+                      <div className="barrow" key={p.pid}>
+                        <span className="bn">{p.process}</span>
+                        <span className="track"><span className="fill" style={{ width: `${((p.down_bps + p.up_bps) / maxThr) * 100}%` }} /></span>
+                        <span className="bv">{fr(p.down_mo_s)}↓ {fr(p.up_mo_s)}↑</span>
+                      </div>
+                    ))}
+                    <div className="disc">Débit réel par processus (Mo/s ↓/↑) — capture pktmon en direct.</div>
+                  </>
+                ) : (
+                  <>
+                    {top.length === 0 && <div className="empty">Aucune donnée</div>}
+                    {top.map((t: any) => (
+                      <div className="barrow" key={t.pid}>
+                        <span className="bn">{t.process}</span>
+                        <span className="track"><span className="fill" style={{ width: `${(t.connections / maxTalk) * 100}%` }} /></span>
+                        <span className="bv">{t.connections} conn.</span>
+                      </div>
+                    ))}
+                    <div className="disc">Processus classés par nombre de connexions actives. {thr && !thr.available && <span style={{ color: "var(--watch)" }}>Débit par processus : {thr.reason || "indisponible"}.</span>}</div>
+                  </>
+                )}
               </div>
             )}
           </Card>
@@ -307,6 +326,7 @@ function Dashboard({ conns, exposure, metrics, modules, logs, bwHist, scoreHist,
                 <div className="recap"><span className="ic">📡</span>Beaconing C2<span className="v" style={{ color: beaconing?.length ? "var(--crit)" : "var(--faint)" }}>{beaconing?.length || 0}</span></div>
                 <div className="recap"><span className="ic">🚪</span>Ports en écoute exposés<span className="v" style={{ color: (m?.listeners_exposed ?? 0) ? "var(--watch)" : "var(--safe)" }}>{m?.listeners_exposed ?? 0}</span></div>
                 <div className="recap"><span className="ic">🌐</span>Endpoints distincts<span className="v">{m?.endpoints ?? new Set((conns as ScoredConnection[]).map((c) => c.remote_addr)).size}</span></div>
+                <div className="recap"><span className="ic">📥</span>Capture entrante (pktmon)<span className="v" style={{ color: thr?.available ? "var(--safe)" : "var(--faint)" }}>{thr?.available ? `${thr.inbound_packets} pqt` : "admin requis"}</span></div>
                 <div className="recap"><span className="ic">💾</span>Budget journal<span className="v">≤ 1 Go</span></div>
               </Card>
             ),
@@ -930,6 +950,8 @@ export default function App() {
   const top = usePolling(api.topTalkers, 5000);
   const metrics = usePolling(api.metrics, 5000);
   const listeners = usePolling(api.listeners, 8000);
+  const thrStatus = usePolling(api.throughputStatus, 6000);
+  const thrProcs = usePolling(api.throughputProcesses, 2000);
   const logs = usePolling(() => api.logs(), 5000);
   const history = usePolling(api.history, 8000);
   const [traceTarget, setTraceTarget] = useState("1.1.1.1");
@@ -1002,7 +1024,7 @@ export default function App() {
         ))}
       </div>
 
-      {tab === "dashboard" && <Dashboard conns={conns} exposure={exposure.data} metrics={metrics.data} modules={mods} logs={logs.data || []} bwHist={bwHist} scoreHist={scoreHist} top={top.data || []} trace={trace.data} beaconing={beaconing.data || []} sevFilter={sevFilter} onGo={setTab} onSelect={selectEndpoint} />}
+      {tab === "dashboard" && <Dashboard conns={conns} exposure={exposure.data} metrics={metrics.data} modules={mods} logs={logs.data || []} bwHist={bwHist} scoreHist={scoreHist} top={top.data || []} thrStatus={thrStatus.data} thrProcs={thrProcs.data || []} trace={trace.data} beaconing={beaconing.data || []} sevFilter={sevFilter} onGo={setTab} onSelect={selectEndpoint} />}
       {tab === "bouclier" && <Bouclier conns={conns} active={sevFilter} setActive={setSevFilter} />}
       {tab === "carte" && <CarteReseau conns={conns} listeners={listeners.data || []} trace={trace.data} traceLabel={traceLabel} onRun={runTrace} onSelect={selectEndpoint} />}
       {tab === "remediation" && <Remediation conns={conns} />}
