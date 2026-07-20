@@ -25,7 +25,7 @@ from app.modules.intel import IntelModule
 from app.modules.llm import LlmModule
 from app.modules.osint import OsintModule
 from app.runtime import runtime
-from app.modules.firewall import FirewallModule, FwRequest
+from app.modules.firewall import FirewallModule, FwRequest, FwPortRequest
 from app.modules.hids import HidsModule
 from app.modules.lan import LanModule
 from app.modules.mail import MailModule, MailRequest
@@ -316,6 +316,22 @@ def create_app() -> FastAPI:
         persist = registry.get("persistence")
         if persist is not None and persist.health() == ModuleStatus.ACTIVE:
             persist.add_audit("firewall_unblock", req.ip)
+        return result
+
+    @app.post("/firewall/block-port")
+    def firewall_block_port(req: FwPortRequest):
+        result = _require("firewall").block_port(req.port, req.protocol, dry_run=req.dry_run)
+        persist = registry.get("persistence")
+        if persist is not None and persist.health() == ModuleStatus.ACTIVE and not req.dry_run:
+            persist.add_audit("firewall_block_port", f"{req.protocol}/{req.port}")
+        return result
+
+    @app.post("/firewall/unblock-port")
+    def firewall_unblock_port(req: FwPortRequest):
+        result = _require("firewall").unblock_port(req.port, req.protocol)
+        persist = registry.get("persistence")
+        if persist is not None and persist.health() == ModuleStatus.ACTIVE:
+            persist.add_audit("firewall_unblock_port", f"{req.protocol}/{req.port}")
         return result
 
     @app.get("/firewall/rules")

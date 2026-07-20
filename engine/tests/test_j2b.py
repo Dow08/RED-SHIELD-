@@ -36,6 +36,17 @@ def test_firewall_dry_run_and_validation():
     assert not bad["ok"]
 
 
+def test_firewall_block_port_dry_run():
+    fw = FirewallModule(EventBus())
+    fw.start()
+    dry = fw.block_port(445, "tcp", dry_run=True)
+    assert dry["ok"] and dry.get("dry_run")
+    assert "dir=in" in dry["command"] and "action=block" in dry["command"]
+    assert "protocol=TCP" in dry["command"] and "localport=445" in dry["command"]
+    assert not fw.block_port(70000, "tcp", dry_run=True)["ok"]   # port hors bornes
+    assert not fw.block_port(80, "icmp", dry_run=True)["ok"]      # protocole invalide
+
+
 def test_lan_parse_arp():
     mod = LanModule(EventBus())
     devs = mod.parse(SAMPLE_ARP)

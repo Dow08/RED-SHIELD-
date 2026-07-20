@@ -64,6 +64,23 @@ function CutButton({ ip }: { ip: string }) {
   return <span style={{ display: "inline-flex", gap: 8, alignItems: "center" }}><span style={{ color: "var(--safe)", fontSize: 12 }}>{msg}</span><button className="btn ghost" onClick={undo}>Débloquer (undo)</button></span>;
 }
 
+function ClosePortButton({ port, protocol }: { port: number; protocol: string }) {
+  const [stage, setStage] = useState<"idle" | "confirm" | "done">("idle");
+  const [msg, setMsg] = useState("");
+  const dry = async () => { try { const r = await api.firewallBlockPort(port, protocol, true); setMsg(r.command || ""); setStage("confirm"); } catch { setMsg("moteur injoignable"); } };
+  const apply = async () => { try { const r = await api.firewallBlockPort(port, protocol, false); setMsg(r.ok ? "Port fermé (entrant bloqué) ✅" : (r.error || "échec")); setStage(r.ok ? "done" : "confirm"); } catch { setMsg("échec"); } };
+  const undo = async () => { try { await api.firewallUnblockPort(port, protocol); setMsg("Rouvert"); setStage("idle"); } catch { setMsg("échec"); } };
+  if (stage === "idle") return <button className="btn ghost" style={{ padding: "5px 9px", fontSize: 11 }} onClick={dry}>Fermer</button>;
+  if (stage === "confirm") return (
+    <span style={{ display: "inline-flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+      <span className="mono" style={{ fontSize: 9.5, color: "var(--faint)" }}>{msg}</span>
+      <button className="btn" style={{ padding: "5px 9px", fontSize: 11 }} onClick={apply}>Confirmer</button>
+      <button className="btn ghost" style={{ padding: "5px 9px", fontSize: 11 }} onClick={() => setStage("idle")}>Annuler</button>
+    </span>
+  );
+  return <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}><span style={{ color: "var(--safe)", fontSize: 11 }}>{msg}</span><button className="btn ghost" style={{ padding: "5px 9px", fontSize: 11 }} onClick={undo}>Rouvrir</button></span>;
+}
+
 function Reorderable({ ids, render, storageKey }: { ids: string[]; render: (id: string) => React.ReactNode; storageKey: string }) {
   const [order, setOrder] = useState<string[]>(() => {
     try { const saved = JSON.parse(localStorage.getItem(storageKey) || "[]"); if (Array.isArray(saved) && saved.length) return [...saved.filter((s: string) => ids.includes(s)), ...ids.filter((i) => !saved.includes(i))]; } catch { /* noop */ }
@@ -448,7 +465,7 @@ function CarteReseau({ conns, listeners, trace, traceLabel, onRun, onSelect }: {
         {listeners.length === 0 ? <div className="empty">Aucun port en écoute détecté.</div> : (
           <div className="tscroll">
             <table>
-              <thead><tr><th>Port</th><th>Proto</th><th>Process</th><th>PID</th><th>Liaison</th><th>Exposition</th></tr></thead>
+              <thead><tr><th>Port</th><th>Proto</th><th>Process</th><th>PID</th><th>Liaison</th><th>Exposition</th><th>Action</th></tr></thead>
               <tbody>
                 {[...listeners].sort((a, b) => Number(b.exposed) - Number(a.exposed) || a.port - b.port).map((l, i) => (
                   <tr key={i}>
@@ -460,6 +477,7 @@ function CarteReseau({ conns, listeners, trace, traceLabel, onRun, onSelect }: {
                     <td>{l.exposed
                       ? <span className="sev w"><span className="d"></span>Exposé</span>
                       : <span className="sev s"><span className="d"></span>Local</span>}</td>
+                    <td>{l.exposed ? <ClosePortButton port={l.port} protocol={l.protocol} /> : <span className="muted">—</span>}</td>
                   </tr>
                 ))}
               </tbody>

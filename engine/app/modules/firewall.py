@@ -21,6 +21,12 @@ class FwRequest(BaseModel):
     dry_run: bool = True
 
 
+class FwPortRequest(BaseModel):
+    port: int
+    protocol: str = "tcp"
+    dry_run: bool = True
+
+
 def _valid_ip(ip: str) -> bool:
     try:
         ipaddress.ip_address(ip)
@@ -72,6 +78,31 @@ class FirewallModule(Module):
             return {"ok": False, "error": "pare-feu Windows uniquement"}
         cmd = ["netsh", "advfirewall", "firewall", "delete", "rule", f"name={self._rule(ip)}"]
         return self._run(cmd, ip, "unblock")
+
+    # -- fermeture d'un port en écoute exposé (blocage entrant) ----------
+    def _port_rule(self, port: int, proto: str) -> str:
+        return f"RED-block-port-{proto}-{port}"
+
+    def block_port(self, port: int, protocol: str = "tcp", dry_run: bool = True) -> dict:
+        proto = (protocol or "tcp").lower()
+        if not (1 <= int(port) <= 65535) or proto not in ("tcp", "udp"):
+            return {"ok": False, "error": "port ou protocole invalide"}
+        cmd = ["netsh", "advfirewall", "firewall", "add", "rule", f"name={self._port_rule(port, proto)}",
+               "dir=in", "action=block", f"protocol={proto.upper()}", f"localport={port}"]
+        if dry_run:
+            return {"ok": True, "dry_run": True, "command": " ".join(cmd)}
+        if self.health() != ModuleStatus.ACTIVE:
+            return {"ok": False, "error": "pare-feu Windows uniquement"}
+        return self._run(cmd, f"{proto}/{port}", "block_port")
+
+    def unblock_port(self, port: int, protocol: str = "tcp") -> dict:
+        proto = (protocol or "tcp").lower()
+        if not (1 <= int(port) <= 65535) or proto not in ("tcp", "udp"):
+            return {"ok": False, "error": "port ou protocole invalide"}
+        if self.health() != ModuleStatus.ACTIVE:
+            return {"ok": False, "error": "pare-feu Windows uniquement"}
+        cmd = ["netsh", "advfirewall", "firewall", "delete", "rule", f"name={self._port_rule(port, proto)}"]
+        return self._run(cmd, f"{proto}/{port}", "unblock_port")
 
     def list_rules(self) -> list[str]:
         if self.health() != ModuleStatus.ACTIVE:
