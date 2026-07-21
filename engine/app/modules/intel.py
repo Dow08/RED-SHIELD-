@@ -5,8 +5,7 @@ air-gapped → « non connecté » (jamais de donnée inventée).
 """
 from __future__ import annotations
 
-import httpx
-
+from app.core import http
 from app.core.bus import EventBus
 from app.modules.base import Module, ModuleStatus
 from app.runtime import runtime
@@ -34,15 +33,15 @@ class IntelModule(Module):
         if not vt:
             sources.append({"source": "VirusTotal", "error": "non connecté"})
         else:
+            r = http.get(f"https://www.virustotal.com/api/v3/ip_addresses/{ip}",
+                         headers={"x-apikey": vt}, timeout=15)
             try:
-                r = httpx.get(f"https://www.virustotal.com/api/v3/ip_addresses/{ip}",
-                              headers={"x-apikey": vt}, timeout=15)
-                if r.status_code == 200:
+                if r.ok:
                     st = r.json()["data"]["attributes"]["last_analysis_stats"]
                     sources.append({"source": "VirusTotal", "malicious": st.get("malicious", 0),
                                     "suspicious": st.get("suspicious", 0), "harmless": st.get("harmless", 0)})
                 else:
-                    sources.append({"source": "VirusTotal", "error": f"HTTP {r.status_code}"})
+                    sources.append({"source": "VirusTotal", "error": r.error or f"HTTP {r.status_code}"})
             except Exception as exc:
                 sources.append({"source": "VirusTotal", "error": str(exc)})
 
@@ -50,16 +49,16 @@ class IntelModule(Module):
         if not abuse:
             sources.append({"source": "AbuseIPDB", "error": "non connecté"})
         else:
+            r = http.get("https://api.abuseipdb.com/api/v2/check",
+                         params={"ipAddress": ip, "maxAgeInDays": 90},
+                         headers={"Key": abuse, "Accept": "application/json"}, timeout=15)
             try:
-                r = httpx.get("https://api.abuseipdb.com/api/v2/check",
-                              params={"ipAddress": ip, "maxAgeInDays": 90},
-                              headers={"Key": abuse, "Accept": "application/json"}, timeout=15)
-                if r.status_code == 200:
+                if r.ok:
                     d = r.json()["data"]
                     sources.append({"source": "AbuseIPDB", "score": d.get("abuseConfidenceScore"),
                                     "reports": d.get("totalReports"), "country": d.get("countryCode")})
                 else:
-                    sources.append({"source": "AbuseIPDB", "error": f"HTTP {r.status_code}"})
+                    sources.append({"source": "AbuseIPDB", "error": r.error or f"HTTP {r.status_code}"})
             except Exception as exc:
                 sources.append({"source": "AbuseIPDB", "error": str(exc)})
 

@@ -14,8 +14,7 @@ import os
 import threading
 import time
 
-import httpx
-
+from app.core import http
 from app.runtime import runtime
 
 _NVD = "https://services.nvd.nist.gov/rest/json/cves/2.0"
@@ -89,13 +88,12 @@ def lookup(product: str, version: str = "") -> dict:
         _last_call[0] = time.monotonic()
     q = f"{product} {version}".strip()
     headers = {"apiKey": api_key} if api_key else {}
-    try:
-        r = httpx.get(_NVD, params={"keywordSearch": q, "resultsPerPage": 20}, headers=headers, timeout=25)
-        if r.status_code != 200:
-            return {"available": True, "reason": f"NVD HTTP {r.status_code}", "cves": []}
-        cves = parse_nvd(r.json())
-    except Exception as exc:
-        return {"available": True, "reason": str(exc), "cves": []}
+    r = http.get(_NVD, params={"keywordSearch": q, "resultsPerPage": 20}, headers=headers)
+    if r.error:
+        return {"available": True, "reason": r.error, "cves": []}
+    if r.status_code != 200:
+        return {"available": True, "reason": f"NVD HTTP {r.status_code}", "cves": []}
+    cves = parse_nvd(r.json() or {})
     with _cache_lock:
         _cache[key] = cves
     return {"available": True, "cves": cves, "source": "NVD (keyword)"}

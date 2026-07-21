@@ -12,8 +12,7 @@ from __future__ import annotations
 
 import json
 
-import httpx
-
+from app.core import http
 from app.core.bus import EventBus
 from app.modules.base import Module, ModuleStatus
 from app.runtime import runtime
@@ -93,35 +92,36 @@ class SiemModule(Module):
             auth = (cfg["username"], cfg["password"])
         headers = self._headers(cfg)
         # Labs Wazuh : certificat auto-signé fréquent → vérif TLS désactivable (défaut False).
+        # Cible souvent locale/LAN → local=True (on ignore un proxy système).
         verify = bool(cfg.get("verify", False))
         if is_search:
             body = {"size": limit, "sort": [{"@timestamp": {"order": "desc"}}], "query": {"match_all": {}}}
-            return httpx.post(url, json=body, headers=headers, auth=auth, timeout=20, verify=verify)
-        return httpx.get(url, headers=headers, auth=auth, timeout=20, verify=verify)
+            return http.post(url, json=body, headers=headers, auth=auth, timeout=20, verify=verify, local=True)
+        return http.get(url, headers=headers, auth=auth, timeout=20, verify=verify, local=True)
 
     def test(self) -> dict:
         blocked = self._gate()
         if blocked:
             return {"available": False, **blocked}
         cfg = self._config() or {}
-        try:
-            r = self._fetch(cfg, limit=1)
-            return {"available": True, "ok": r.status_code < 400, "status_code": r.status_code, "type": cfg.get("type", "")}
-        except Exception as exc:
-            return {"available": True, "ok": False, "error": str(exc)}
+        r = self._fetch(cfg, limit=1)
+        if r.error:
+            return {"available": True, "ok": False, "error": r.error}
+        return {"available": True, "ok": r.ok, "status_code": r.status_code, "type": cfg.get("type", "")}
 
     def alerts(self, limit: int = 25) -> dict:
         blocked = self._gate()
         if blocked:
             return {"available": False, "alerts": [], **blocked}
         cfg = self._config() or {}
-        try:
-            r = self._fetch(cfg, limit=limit)
-            if r.status_code >= 400:
-                return {"available": True, "alerts": [], "error": f"HTTP {r.status_code} (auth/URL ?)"}
-            data = r.json()
-        except Exception as exc:
-            return {"available": True, "alerts": [], "error": str(exc)}
+        r = self._fetch(cfg, limit=limit)
+        if r.error:
+            return {"available": True, "alerts": [], "error": r.error}
+        if r.status_code >= 400:
+            return {"available": True, "alerts": [], "error": f"HTTP {r.status_code} (auth/URL ?)"}
+        data = r.json()
+        if data is None:
+            return {"available": True, "alerts": [], "error": "réponse non-JSON"}
         return {"available": True, "alerts": self._normalize(data, cfg.get("type", ""))[:limit]}
 
     @staticmethod

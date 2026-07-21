@@ -7,8 +7,7 @@ from __future__ import annotations
 
 import re
 
-import httpx
-
+from app.core import http
 from app.core.bus import EventBus
 from app.modules.base import Module, ModuleStatus
 from app.runtime import runtime
@@ -30,12 +29,13 @@ class OsintModule(Module):
             return {"available": False, "reason": "mode air-gapped actif — désactive-le pour l'OSINT", "subdomains": []}
         if not _DOMAIN_RE.match(domain):
             return {"available": True, "error": "domaine invalide", "subdomains": []}
+        r = http.get(f"https://crt.sh/?q=%25.{domain}&output=json")
+        if r.error:
+            return {"available": True, "error": r.error, "subdomains": []}
+        if r.status_code != 200:
+            return {"available": True, "error": f"crt.sh HTTP {r.status_code}", "subdomains": []}
         try:
-            r = httpx.get(f"https://crt.sh/?q=%25.{domain}&output=json", timeout=25,
-                          headers={"User-Agent": "RED-recon"})
-            if r.status_code != 200:
-                return {"available": True, "error": f"crt.sh HTTP {r.status_code}", "subdomains": []}
-            data = r.json()
+            data = r.json() or []
             subs = set()
             for entry in data:
                 for name in str(entry.get("name_value", "")).split("\n"):

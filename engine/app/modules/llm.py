@@ -7,8 +7,7 @@ from __future__ import annotations
 
 import json
 
-import httpx
-
+from app.core import http
 from app.core.bus import EventBus
 from app.modules.base import Module, ModuleStatus
 from app.runtime import runtime
@@ -49,26 +48,29 @@ class LlmModule(Module):
         try:
             if provider == "ollama":
                 url = cfg.get("url", "http://localhost:11434").rstrip("/")
-                r = httpx.post(f"{url}/api/generate",
-                               json={"model": cfg.get("model", "llama3"), "prompt": prompt, "stream": False},
-                               timeout=180)
-                return {"ok": True, "analysis": r.json().get("response", "")} if r.status_code == 200 else {"ok": False, "error": f"Ollama HTTP {r.status_code}"}
+                # Ollama tourne en local → on ignore un éventuel proxy système (local=True).
+                r = http.post(f"{url}/api/generate",
+                              json={"model": cfg.get("model", "llama3"), "prompt": prompt, "stream": False},
+                              timeout=180, local=True)
+                if r.ok:
+                    return {"ok": True, "analysis": (r.json() or {}).get("response", "")}
+                return {"ok": False, "error": r.error or f"Ollama HTTP {r.status_code}"}
             if provider == "anthropic":
-                r = httpx.post("https://api.anthropic.com/v1/messages",
-                               headers={"x-api-key": cfg.get("key", ""), "anthropic-version": "2023-06-01", "content-type": "application/json"},
-                               json={"model": cfg.get("model", "claude-sonnet-5"), "max_tokens": 1024, "messages": [{"role": "user", "content": prompt}]},
-                               timeout=120)
-                if r.status_code == 200:
+                r = http.post("https://api.anthropic.com/v1/messages",
+                              headers={"x-api-key": cfg.get("key", ""), "anthropic-version": "2023-06-01", "content-type": "application/json"},
+                              json={"model": cfg.get("model", "claude-sonnet-5"), "max_tokens": 1024, "messages": [{"role": "user", "content": prompt}]},
+                              timeout=120)
+                if r.ok:
                     return {"ok": True, "analysis": r.json()["content"][0]["text"]}
-                return {"ok": False, "error": f"Anthropic HTTP {r.status_code}: {r.text[:200]}"}
+                return {"ok": False, "error": r.error or f"Anthropic HTTP {r.status_code}: {r.text[:200]}"}
             if provider == "openai":
-                r = httpx.post("https://api.openai.com/v1/chat/completions",
-                               headers={"Authorization": f"Bearer {cfg.get('key', '')}"},
-                               json={"model": cfg.get("model", "gpt-4o-mini"), "messages": [{"role": "user", "content": prompt}]},
-                               timeout=120)
-                if r.status_code == 200:
+                r = http.post("https://api.openai.com/v1/chat/completions",
+                              headers={"Authorization": f"Bearer {cfg.get('key', '')}"},
+                              json={"model": cfg.get("model", "gpt-4o-mini"), "messages": [{"role": "user", "content": prompt}]},
+                              timeout=120)
+                if r.ok:
                     return {"ok": True, "analysis": r.json()["choices"][0]["message"]["content"]}
-                return {"ok": False, "error": f"OpenAI HTTP {r.status_code}"}
+                return {"ok": False, "error": r.error or f"OpenAI HTTP {r.status_code}"}
         except Exception as exc:
             return {"ok": False, "error": str(exc)}
         return {"ok": False, "error": f"provider inconnu: {provider}"}
