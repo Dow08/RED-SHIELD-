@@ -40,31 +40,27 @@ liée à `127.0.0.1`.
 
 ---
 
-## 3. Recommandations à arbitrer (avant les builds)
+## 3. Recommandations — ✅ toutes traitées
 
-Classées par rapport valeur / risque. Rien ici n'est bloquant ; ce sont des chantiers à
-décider ensemble.
+Chantiers décidés et **appliqués** (commits `a402465` → `49330d1`), sans régression.
 
-1. **Découper `App.tsx` (~1450 lignes)** — _valeur haute, risque moyen_. Le frontend est
-   monolithique : extraire un fichier par onglet (`Dashboard.tsx`, `Grc.tsx`, `Health.tsx`,
-   `Diagnostic.tsx`…) + un dossier `components/`. À faire posément, écran par écran, avec
-   vérif visuelle — d'où le report volontaire.
-2. **Normaliser l'accès aux modules dans `main.py`** — _valeur moyenne, risque faible_. Deux
-   styles coexistent : `_require` (503 si inactif) et `registry.get(...) or fallback` (dégradé
-   souple). Fixer une convention explicite (ex. **lecture = souple**, **action = stricte**) et
-   introduire un helper `_optional(name, method, fallback)` pour collapser les ~15 endpoints
-   « get-or-fallback » restants.
-3. **`core/http.py`** — _valeur moyenne_. Faire pour les appels réseau (`httpx`) ce que
-   `proc.py` a fait pour les commandes : un point unique qui applique timeout, gate
-   air-gapped et gestion proxy (NVD, VirusTotal, crt.sh, Wazuh, Ollama passent aujourd'hui
-   chacun leur propre `httpx.get/post`).
-4. **`health.clean` — suivi des liens symboliques** — _durcissement_. La suppression itère
-   des dossiers en liste blanche ; ajouter une garde « ne pas suivre un lien pointant hors du
-   dossier ciblé » avant `os.remove` (défense en profondeur contre un cache piégé).
-5. **Couverture de tests des actions** — étendre au-delà du smoke : tester les POST d'action
-   (firewall dry-run, health/clean dry-run, grc/control) en bout-en-bout.
-6. **Journalisation** — envisager un niveau `debug` désactivé par défaut et une rotation
-   explicite des logs applicatifs (la rétention SQLite ≤ 1 Go existe déjà pour les snapshots).
+1. ✅ **Découper `App.tsx`** — passé de **1566 à 155 lignes** : primitives partagées dans
+   `src/shared.tsx`, **un fichier par onglet** sous `src/tabs/` (11 fichiers). Code déplacé
+   verbatim (script) → aucun changement de comportement ; les 11 onglets rendent, 0 erreur
+   console. Bonus : `tsc --noEmit` devient un **vrai garde-fou** (target/lib ES2022,
+   `vite-env.d.ts`, type nullable corrigé) et `npm run build` lance `tsc && vite build`.
+2. ✅ **Normaliser l'accès aux modules dans `main.py`** — helper `_optional(name, method,
+   fallback)` ; ~19 endpoints « get-or-fallback » réduits à une ligne ; convention explicitée
+   (**lecture souple / action stricte**).
+3. ✅ **`core/http.py`** — point unique des appels réseau (timeout, erreurs isolées, en-tête
+   UA, flag `local=True` pour Ollama/Wazuh). 5 modules migrés ; `httpx` centralisé.
+4. ✅ **`health.clean` — garde anti-symlink** — ne descend jamais dans un lien/jonction et
+   ignore les fichiers-liens.
+5. ✅ **Tests des actions** — POST dry-run (firewall, health/clean) + rejets 400 (grc, connecteur).
+6. ✅ **Journalisation** — vérifié : déjà bornée (deque `maxlen=5000`) + purge à la fermeture ;
+   rien à ajouter.
+
+**Suivi tests** : 93 pytest + 7 vitest, `tsc --noEmit` sans erreur, build front OK.
 
 ---
 
