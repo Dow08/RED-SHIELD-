@@ -145,7 +145,14 @@ export const api = {
   hidsRun: () => post<{ ok: boolean; error?: string }>("/hids/run", {}),
   defender: () => get<DefenderStatus>("/defender"),
   defenderRun: () => post<{ ok: boolean; error?: string }>("/defender/run", {}),
-  mailAnalyze: (eml: string) => post<MailAnalysis>("/mail/analyze", { eml }),
+  mailAnalyze: async (eml: string): Promise<MailAnalysis> => {
+    try {
+      const res = await fetch(BASE + "/mail/analyze", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ eml }) });
+      if (res.ok) return res.json();
+    } catch { /* moteur absent (mobile) → repli local */ }
+    const { analyzeEml } = await import("./mobile/offline");
+    return analyzeEml(eml) as unknown as MailAnalysis;
+  },
   imapStatus: () => get<{ configured: boolean; airgapped: boolean; host: string; username: string }>("/imap/status"),
   imapCheck: () => get<ImapResult>("/imap/check"),
   config: () => get<{ airgapped: boolean; purge_on_exit: boolean; storage_budget_go: number; sample_interval: number }>("/config"),
@@ -160,9 +167,15 @@ export const api = {
   osintSubdomains: (domain: string) => post<OsintResult>("/osint/subdomains", { domain }),
   llmAnalyze: (text: string, kind: string) => post<LlmResult>("/llm/analyze", { text, kind }),
   crack: async (payload: { algo: string; target: string; salt?: string; iterations?: number; dklen?: number; words: string[] }): Promise<CrackResult> => {
-    const res = await fetch(BASE + "/crack", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-    if (!res.ok) throw new Error("crack");
-    return res.json();
+    try {
+      const res = await fetch(BASE + "/crack", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      if (res.ok) return res.json();
+    } catch { /* moteur absent (mobile) → repli local */ }
+    // Repli hors-ligne : md5/sha1/sha256/sha512 (PBKDF2 reste côté moteur desktop).
+    if (payload.algo.startsWith("pbkdf2")) return { found: null, tried: 0, algo: payload.algo, error: "PBKDF2 nécessite le moteur (desktop)" };
+    const { crackHash } = await import("./mobile/offline");
+    const r = await crackHash(payload.algo, payload.target, payload.words);
+    return { found: r.found, tried: r.tried, algo: r.algo, error: null };
   },
   healthReport: () => get<HealthReport>("/health/report"),
   healthRun: () => post<{ ok: boolean }>("/health/run", {}),
