@@ -1,5 +1,6 @@
-// Client API RED. En dev, /api est proxifié vers le moteur (127.0.0.1:8787).
-const BASE = "/api";
+// Client API RED. En dev, /api est proxifié par Vite vers le moteur (127.0.0.1:8787).
+// Dans le build natif (Tauri, pas de proxy), on appelle le moteur directement.
+const BASE = import.meta.env.DEV ? "/api" : "http://127.0.0.1:8787";
 
 export type Severity = "safe" | "watch" | "suspect" | "crit";
 

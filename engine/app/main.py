@@ -8,6 +8,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 
 from app import __version__
@@ -117,6 +118,15 @@ def create_app() -> FastAPI:
     app = FastAPI(title="RED — Network Shield & Recon", version=__version__, lifespan=lifespan)
     app.state.bus = bus
     app.state.registry = registry
+
+    # CORS : l'app native (Tauri, origine tauri.localhost) et le dev server appellent le
+    # moteur lié à 127.0.0.1. On autorise uniquement ces origines locales (jamais le réseau).
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=r"^(https?://(tauri\.)?localhost(:\d+)?|tauri://localhost)$",
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     # Un abonné défaillant est journalisé sans republier sur le bus (évite toute récursion).
     bus.set_error_handler(

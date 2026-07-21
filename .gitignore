@@ -25,6 +25,15 @@ build/
 dist/
 *.spec.bak
 
+# Tauri / PyInstaller (artefacts lourds, régénérés au build)
+ui/src-tauri/target/
+ui/src-tauri/binaries/
+ui/src-tauri/gen/
+engine/build_pyi/
+engine/dist/
+engine/*.spec
+rust-toolchain-cache/
+
 # OS / éditeurs
 .DS_Store
 Thumbs.db
