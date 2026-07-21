@@ -1133,6 +1133,36 @@ function StartupToggle({ item, onDone }: { item: import("./api").StartupItem; on
   if (!managed) return <span className="muted" style={{ fontSize: 10 }}>{item.source.includes("Dossier") ? "dossier" : "admin requis"}</span>;
   return <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>{err && <span style={{ color: "var(--crit)", fontSize: 10 }}>{err}</span>}<button className="btn ghost" style={{ padding: "4px 9px", fontSize: 11 }} disabled={busy} onClick={toggle}>{item.enabled ? "Désactiver" : "Réactiver"}</button></span>;
 }
+function CleanDonut({ items }: { items: { label: string; size_mb: number }[] }) {
+  const data = items.filter((i) => i.size_mb > 0);
+  const total = data.reduce((s, i) => s + i.size_mb, 0);
+  if (total <= 0) return <div className="disc" style={{ color: "var(--safe)", textAlign: "center" }}>✅ Rien à nettoyer</div>;
+  const cx = 50, cy = 50, rad = 36, C = 2 * Math.PI * rad;
+  const colors = ["var(--accent)", "var(--accent2)", "var(--safe)", "var(--watch)", "#a78bfa", "#f472b6", "var(--crit)"];
+  let acc = 0;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 16, padding: "8px 16px", flexWrap: "wrap" }}>
+      <svg viewBox="0 0 100 100" width="112" height="112" style={{ flex: "none" }}>
+        {data.map((d, i) => {
+          const frac = d.size_mb / total; const dash = frac * C; const off = acc * C; acc += frac;
+          return <circle key={i} cx={cx} cy={cy} r={rad} fill="none" stroke={colors[i % colors.length]} strokeWidth="14"
+            strokeDasharray={`${dash} ${C - dash}`} strokeDashoffset={-off} transform={`rotate(-90 ${cx} ${cy})`} />;
+        })}
+        <text x={cx} y={cy - 1} textAnchor="middle" fontSize="15" fontWeight="800" fill="var(--ink)">{total >= 1000 ? (total / 1000).toFixed(1) : Math.round(total)}</text>
+        <text x={cx} y={cy + 12} textAnchor="middle" fontSize="7" fill="var(--faint)">{total >= 1000 ? "Go" : "Mo"} récupérables</text>
+      </svg>
+      <div style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11.5, minWidth: 180 }}>
+        {data.map((d, i) => (
+          <span key={d.label} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ width: 9, height: 9, borderRadius: 2, background: colors[i % colors.length], flex: "none" }}></span>
+            <span style={{ color: "var(--soft)" }}>{d.label}</span>
+            <b style={{ marginLeft: "auto", fontVariantNumeric: "tabular-nums", color: "var(--faint)" }}>{d.size_mb >= 1000 ? `${(d.size_mb / 1000).toFixed(1)} Go` : `${d.size_mb} Mo`}</b>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
 function Health({ report, updater }: { report: import("./api").HealthReport | null; updater: import("./api").UpdaterResult | null }) {
   const r = report;
   const upd = updater;
@@ -1177,6 +1207,7 @@ function Health({ report, updater }: { report: import("./api").HealthReport | nu
         </Card>
         <Card title="Nettoyage" right={r ? `${r.cleanable_total_mb} Mo récupérables` : ""}>
           <div className="note">Nettoie par catégorie (temp, corbeille, caches navigateurs, miniatures, Windows Update). Chaque nettoyage : taille réelle → <b>dry-run → confirmation</b>. Protège les fichiers récents / en cours d'usage.</div>
+          {r && !r.running && <CleanDonut items={r.cleanables} />}
           {(r?.cleanables || []).map((c) => (
             <div className="row" key={c.id}>
               <span className="nm">{c.label}{c.admin && <span className="badge" style={{ marginLeft: 6, fontSize: 9 }}>admin</span>}</span>
