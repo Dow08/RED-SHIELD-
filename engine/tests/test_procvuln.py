@@ -1,31 +1,38 @@
-"""Tests du module Vulnérabilités des processus (croisement produit/version ↔ CVE locale)."""
+"""Tests du module Vulnérabilités des processus (croisement produit/version ↔ NVD en ligne, mocké)."""
 from fastapi.testclient import TestClient
 
 from app.core.bus import EventBus
 from app.main import create_app
+from app.modules import cve as cve_online
 from app.modules.procvuln import ProcVulnModule
 
 
-def _mod():
+def _fake_lookup(product: str, version: str = "") -> dict:
+    if "openssh" in (product or "").lower():
+        return {"available": True, "cves": [{"cve": "CVE-2023-38408", "cvss": 9.8, "severity": "critical",
+                "summary": "x", "url": "https://nvd.nist.gov/vuln/detail/CVE-2023-38408"}]}
+    return {"available": True, "cves": []}
+
+
+def test_match_known_product(monkeypatch):
+    monkeypatch.setattr(cve_online, "lookup", _fake_lookup)
     m = ProcVulnModule(EventBus())
-    m.start()  # charge la base CVE locale
-    return m
+    m.start()
+    assert any(c.cve.startswith("CVE-") for c in m._match("OpenSSH", "8.2p1"))
 
 
-def test_match_known_product():
-    m = _mod()
-    cves = m._match("OpenSSH", "8.2p1")            # produit + version présents dans la base
-    assert any(c.cve.startswith("CVE-") for c in cves)
-
-
-def test_match_unknown_product_is_empty():
-    m = _mod()
-    assert m._match("Google Chrome", "120.0.0") == []   # aucune invention : rien dans la base
-    assert m._match("", "1.0") == [] and m._match("OpenSSH", "") == []
+def test_match_unknown_or_empty(monkeypatch):
+    monkeypatch.setattr(cve_online, "lookup", _fake_lookup)
+    m = ProcVulnModule(EventBus())
+    m.start()
+    assert m._match("Google Chrome", "150.0") == []   # inconnu du mock
+    assert m._match("", "1.0") == []                   # pas de produit → aucun appel
 
 
 def test_run_with_mocked_env(monkeypatch):
-    m = _mod()
+    monkeypatch.setattr(cve_online, "lookup", _fake_lookup)
+    m = ProcVulnModule(EventBus())
+    m.start()
     monkeypatch.setattr(ProcVulnModule, "_connected_exes",
                         staticmethod(lambda: {"C:/app/sshd.exe": {"process": "sshd.exe", "pid": 42}}))
     monkeypatch.setattr(ProcVulnModule, "_versions",

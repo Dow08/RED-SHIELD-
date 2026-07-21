@@ -659,7 +659,7 @@ function Recon({ lan, scan, procvuln, onScan }: { lan: LanDevice[] | null; scan:
     <div className="grid">
       <div className="col">
         <Card title="Scan hôte (nmap + CVE)" right={scan && scan.nmap_available === false ? "nmap absent" : "prêt"}>
-          <div className="note">Cibles <b>autorisées uniquement</b> (propriété ou autorisation écrite). Chaque service détecté est croisé avec la base CVE locale → lien NVD.</div>
+          <div className="note">Cibles <b>autorisées uniquement</b> (propriété ou autorisation écrite). Chaque service détecté est croisé avec <b>NVD en ligne</b> (source officielle, à jour) → lien NVD. Nécessite <b>air-gapped OFF</b>.</div>
           <div className="toolbar">
             <input className="key" style={{ letterSpacing: 0, width: 220 }} value={target} onChange={(e) => setTarget(e.target.value)} placeholder="IP / CIDR / hôte" />
             <span className="seg">
@@ -687,7 +687,7 @@ function Recon({ lan, scan, procvuln, onScan }: { lan: LanDevice[] | null; scan:
                     <span className="ds">{[p.service, p.product, p.version].filter(Boolean).join(" ")}</span>
                     <span className="badge" style={{ borderColor: "var(--accent)", color: "var(--accent)" }}>{p.osi_label}</span>
                     <span style={{ marginLeft: "auto", display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      {p.cves.length === 0 ? <span className="stt on">aucune CVE (base locale)</span> : p.cves.map((c) => <a key={c.cve} className="badge m" href={c.url} target="_blank" rel="noopener">{c.cve} · {c.cvss} ↗</a>)}
+                      {p.cves.length === 0 ? <span className="stt on">aucune CVE (NVD)</span> : p.cves.map((c) => <a key={c.cve} className="badge m" href={c.url} target="_blank" rel="noopener">{c.cve} · {c.cvss} ↗</a>)}
                     </span>
                   </div>
                   {p.compliance.length > 0 && (
@@ -719,7 +719,7 @@ function Recon({ lan, scan, procvuln, onScan }: { lan: LanDevice[] | null; scan:
           {devices.length === 0 && <div className="empty">Aucun voisin dans le cache ARP (ping le réseau pour le peupler).</div>}
         </Card>
         <Card title="CVE des applications locales" right={<><span style={{ marginRight: 8, color: withCve.length ? "var(--crit)" : "var(--safe)" }}>{withCve.length} vulnérable(s)</span><button className="btn ghost" style={{ padding: "5px 10px" }} onClick={() => api.procvulnRun()}>Analyser</button></>}>
-          <div className="note">Croise le <b>produit + version réels</b> de tes applications avec connexions (métadonnées de l'exécutable) contre la base CVE locale. Factuel : « aucune CVE » = rien dans la base locale, pas une garantie d'absence de faille.</div>
+          <div className="note">Croise le <b>produit + version réels</b> de tes applications avec connexions (métadonnées de l'exécutable) contre <b>NVD en ligne</b> (air-gapped OFF). Factuel : « aucune CVE » = rien remonté par NVD, pas une garantie d'absence de faille.</div>
           {pv?.note && <div className="disc" style={{ padding: "6px 16px" }}>ℹ️ {pv.note}</div>}
           {!pv || pv.running ? <div className="empty">{pv?.running ? "Analyse des applications…" : "Chargement…"}</div>
             : (pv.apps.length === 0 ? <div className="empty">Aucune application avec connexion détectée.</div>
@@ -731,7 +731,7 @@ function Recon({ lan, scan, procvuln, onScan }: { lan: LanDevice[] | null; scan:
                       <div className="rmeta">{a.cves.map((c) => <a key={c.cve} className="badge m" href={c.url} target="_blank" rel="noopener">{c.cve} · {c.cvss} ↗</a>)}</div>
                     </div>
                   ))}
-                  {withCve.length === 0 && <div className="disc" style={{ color: "var(--safe)", padding: "8px 16px" }}>Aucune CVE connue dans la base locale pour les {pv.scanned} application(s) analysée(s) ✅</div>}
+                  {withCve.length === 0 && <div className="disc" style={{ color: "var(--safe)", padding: "8px 16px" }}>Aucune CVE remontée par NVD pour les {pv.scanned} application(s) analysée(s) ✅</div>}
                   <div className="disc" style={{ padding: "6px 16px 12px" }}>{pv.scanned} application(s) analysée(s) · {withCve.length} avec CVE connue.</div>
                 </>
               ))}

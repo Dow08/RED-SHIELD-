@@ -1,12 +1,11 @@
-"""Module Scan (recon offensif) — nmap + croisement CVE local (offline).
+"""Module Scan (recon offensif) — nmap + croisement CVE **en ligne (NVD)**.
 
 Scanne une cible AUTORISÉE (ports/services/versions via nmap -sT -sV, sans privilège),
-puis croise chaque service+version avec une base CVE locale curée → liens NVD.
-Exécution en tâche de fond avec cache. Localise nmap même hors PATH.
+puis croise chaque service+version avec la base NVD **en ligne** (module cve, gated
+air-gapped) → liens NVD. Exécution en tâche de fond avec cache. Localise nmap même hors PATH.
 """
 from __future__ import annotations
 
-import json
 import os
 import re
 import shutil
@@ -17,27 +16,10 @@ import xml.etree.ElementTree as ET
 from pydantic import BaseModel
 
 from app.core.bus import EventBus
+from app.modules import cve as cve_online
 from app.modules.base import Module, ModuleStatus
 
 _NMAP_CANDIDATES = [r"C:\Program Files (x86)\Nmap\nmap.exe", r"C:\Program Files\Nmap\nmap.exe"]
-_CVE_PATH = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "data", "cve_local.json"))
-
-
-def _version_matches(version: str, tokens: list[str]) -> bool:
-    """Correspondance de version robuste (évite que '2.4.4' matche '2.4.49').
-
-    - Un token finissant par '.' est un préfixe de ligne (ex. '6.' → toute la 6.x).
-    - Sinon, correspondance exacte ou suivie d'une borne (., p, espace, -) :
-      '2.4.7' matche '2.4.7' / '2.4.7p1' / '2.4.7 Ubuntu' mais PAS '2.4.79'.
-    """
-    v = (version or "").strip()
-    for tok in tokens:
-        if tok.endswith("."):
-            if v.startswith(tok):
-                return True
-        elif v == tok or any(v.startswith(tok + b) for b in (".", "p", " ", "-")):
-            return True
-    return False
 
 
 def _find_nmap() -> str | None:
@@ -148,24 +130,18 @@ class ScanRequest(BaseModel):
 class ScanModule(Module):
     name = "scan"
     version = "0.1.0"
-    description = "Scan nmap + CVE (offline)"
+    description = "Scan nmap + CVE (NVD en ligne)"
     produces = ["scan"]
 
     def __init__(self, bus: EventBus) -> None:
         super().__init__(bus)
         self._nmap: str | None = None
-        self._cve: list[dict] = []
         self._last: ScanResult | None = None
         self._running = False
         self._lock = threading.Lock()
 
     def start(self) -> None:
         self._nmap = _find_nmap()
-        try:
-            with open(_CVE_PATH, encoding="utf-8") as f:
-                self._cve = json.load(f)
-        except Exception:
-            self._cve = []
         if self._nmap:
             self.set_status(ModuleStatus.ACTIVE)
         else:
@@ -180,15 +156,12 @@ class ScanModule(Module):
         return bool(re.match(r"^[A-Za-z0-9_.\-/]{1,64}$", target))
 
     def match_cves(self, product: str, version: str) -> list[Cve]:
-        out: list[Cve] = []
-        p = (product or "").lower()
-        v = version or ""
-        if not p or not v:
-            return out
-        for e in self._cve:
-            if e["product"].lower() in p and _version_matches(v, e["versions"]):
-                out.append(Cve(cve=e["cve"], cvss=e["cvss"], severity=e["severity"], summary=e["summary"], url=e["url"]))
-        return out
+        """CVE via NVD en ligne (gated air-gapped). Renvoie [] sous air-gapped."""
+        if not (product or "").strip() or not (version or "").strip():
+            return []
+        res = cve_online.lookup(product, version)
+        return [Cve(cve=c["cve"], cvss=c["cvss"], severity=c["severity"], summary=c["summary"], url=c["url"])
+                for c in res.get("cves", [])]
 
     def parse(self, xml: str) -> list[Host]:
         root = ET.fromstring(xml)

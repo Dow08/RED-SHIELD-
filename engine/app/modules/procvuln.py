@@ -1,14 +1,12 @@
-"""Module Vulnérabilités des processus — croise les applications locales avec la base CVE.
+"""Module Vulnérabilités des processus — croise les applications locales avec NVD (en ligne).
 
 Pour chaque processus ayant des connexions réseau, extrait le **produit + version réels**
-depuis les métadonnées de l'exécutable (VersionInfo Windows), puis les croise avec la base
-CVE locale (la même que le scan nmap) → liens NVD. 100 % factuel : si un produit/version
-n'a aucune entrée dans la base locale, il est marqué « aucune CVE connue » (jamais inventé).
+depuis les métadonnées de l'exécutable (VersionInfo Windows), puis interroge la base **NVD
+en ligne** (module cve, gated air-gapped) → liens NVD. 100 % factuel : si aucune CVE n'est
+renvoyée (ou air-gapped actif), c'est indiqué tel quel, jamais inventé.
 """
 from __future__ import annotations
 
-import json
-import os
 import subprocess
 import sys
 import threading
@@ -17,8 +15,8 @@ import psutil
 from pydantic import BaseModel
 
 from app.core.bus import EventBus
+from app.modules import cve as cve_online
 from app.modules.base import Module, ModuleStatus
-from app.modules.scan import _CVE_PATH, _version_matches
 
 
 class ProcCve(BaseModel):
@@ -54,17 +52,11 @@ class ProcVulnModule(Module):
 
     def __init__(self, bus: EventBus) -> None:
         super().__init__(bus)
-        self._cve: list[dict] = []
         self._last: ProcVulnResult | None = None
         self._running = False
         self._lock = threading.Lock()
 
     def start(self) -> None:
-        try:
-            with open(_CVE_PATH, encoding="utf-8") as f:
-                self._cve = json.load(f)
-        except Exception:
-            self._cve = []
         self.set_status(ModuleStatus.ACTIVE)
 
     # -- exécutables des process ayant des connexions -------------------
@@ -110,15 +102,12 @@ class ProcVulnModule(Module):
         return res
 
     def _match(self, product: str, version: str) -> list[ProcCve]:
-        out: list[ProcCve] = []
-        p = (product or "").lower()
-        v = version or ""
-        if not p or not v:
-            return out
-        for e in self._cve:
-            if e["product"].lower() in p and _version_matches(v, e["versions"]):
-                out.append(ProcCve(cve=e["cve"], cvss=e["cvss"], severity=e["severity"], summary=e["summary"], url=e["url"]))
-        return out
+        """CVE via NVD en ligne (gated air-gapped). [] sous air-gapped ou sans produit."""
+        if not (product or "").strip():
+            return []
+        res = cve_online.lookup(product, version)
+        return [ProcCve(cve=c["cve"], cvss=c["cvss"], severity=c["severity"], summary=c["summary"], url=c["url"])
+                for c in res.get("cves", [])]
 
     def _run(self) -> None:
         exes = self._connected_exes()
