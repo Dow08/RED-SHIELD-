@@ -154,7 +154,7 @@ RED SHIELD
 └── .github/workflows/      # Trivy · build desktop · build mobile (Android)
 ```
 
-Détails et conventions : [`CLAUDE.md`](CLAUDE.md) · [`HANDOFF.md`](HANDOFF.md) · [`spec.md`](spec.md).
+Détails et conventions : [`CONTRIBUTING.md`](CONTRIBUTING.md) · [`HANDOFF.md`](HANDOFF.md) · [`spec.md`](spec.md).
 
 ---
 

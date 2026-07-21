@@ -17,7 +17,7 @@
 
 ## Étape 0 — Fondations
 - [ ] T0.1 — `git init`, `.gitignore` (venv, node_modules, `*.db`, `.env`), `README.md`
-- [ ] T0.2 — `CLAUDE.md` (stack figée, conventions, palette, style Command Center, cadre d'usage, règle « zéro donnée inventée »)
+- [ ] T0.2 — `CONTRIBUTING.md` (stack figée, conventions, palette, style Command Center, cadre d'usage, règle « zéro donnée inventée »)
 - [ ] T0.3 — `.env.example` (mode air-gapped par défaut, chemins DB, clés API vides)
 - *Commit : « chore: scaffold projet + conventions »*
 

@@ -2,7 +2,7 @@
 
 > **But** : tout ce qu'il faut savoir pour reprendre le projet RED dans une nouvelle
 > fenêtre de contexte. Écrit le 2026-07-20. Voir aussi `spec.md`, `project-plan.md`,
-> `analysis.md`, `CLAUDE.md`, `A_INSTALLER/README.md`.
+> `analysis.md`, `CONTRIBUTING.md`.
 
 ---
 
@@ -134,7 +134,7 @@ Ordre d'enregistrement dans `register_modules()` : diagnostic (1er, capte les lo
 ---
 
 ## 9. Où est quoi
-- Docs : `spec.md` (spéc), `project-plan.md` (plan J1), `analysis.md` (concurrence + scoring des plus-values), `CLAUDE.md` (conventions), `A_INSTALLER/README.md` (deps à installer), **ce fichier**.
+- Docs : `spec.md` (spéc), `project-plan.md` (plan J1), `analysis.md` (concurrence + scoring des plus-values), `CONTRIBUTING.md` (conventions), **ce fichier**.
 - Config : `.env.example` (copier en `.env`), `engine/config.py` (settings), `engine/app/runtime.py`.
 - Prompts de travail : `prompts/` (les 5 prompts de brainstorming ; on utilise le style Prompt 3 « builder itératif »).
 - Base CVE curée : `engine/data/cve_local.json`. Base GeoIP : `engine/data/dbip-city-lite.mmdb` (gitignore, ~130 Mo).

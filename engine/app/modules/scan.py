@@ -145,7 +145,7 @@ class ScanModule(Module):
         if self._nmap:
             self.set_status(ModuleStatus.ACTIVE)
         else:
-            self.set_status(ModuleStatus.NOT_INSTALLED, "nmap non installé (voir A_INSTALLER)")
+            self.set_status(ModuleStatus.NOT_INSTALLED, "nmap non installé")
 
     @property
     def nmap_available(self) -> bool:

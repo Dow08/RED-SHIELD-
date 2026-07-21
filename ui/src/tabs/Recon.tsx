@@ -57,7 +57,7 @@ export default function Recon({ lan, scan, procvuln, onScan }: { lan: LanDevice[
             ))}
           </div>
           {help && <div className="disc" style={{ padding: "0 14px 10px" }}>ℹ️ {help}</div>}
-          {scan?.nmap_available === false && <div className="empty">nmap non installé — voir le dossier A_INSTALLER.</div>}
+          {scan?.nmap_available === false && <div className="empty">nmap non installé — installe-le puis relance (ex. winget install Insecure.Nmap).</div>}
           {scan?.error && <div className="empty">Erreur : {scan.error}</div>}
           {(scan?.hosts || []).map((h) => (
             <div key={h.ip}>

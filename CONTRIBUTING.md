@@ -1,6 +1,6 @@
-# CLAUDE.md — RED (Network Shield & Recon)
+# Contribuer à RED SHIELD — conventions & architecture
 
-Contexte et conventions du projet, pour toute session de travail sur RED.
+Contexte, stack et conventions du projet, à lire avant toute session de travail sur RED.
 
 ## Ce qu'est RED
 Bouclier réseau modulaire **red + blue** : observe les connexions d'une machine en temps réel, les note (score 0-100), les explique, propose des remédiations priorisées, et s'étend par modules (recon offensif, graphe, connecteurs SIEM/EDR). Voir `spec.md`, `project-plan.md`, `analysis.md`.
