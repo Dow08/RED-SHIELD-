@@ -1,16 +1,18 @@
 # Captures d'écran — RED SHIELD
 
-Dépose ici les captures d'écran de l'application. Le [README principal](../../README.md)
-les affiche automatiquement une fois présentes, aux noms suivants :
+Captures affichées dans le [README principal](../../README.md). Fichiers présents :
 
-| Fichier | Contenu attendu |
+| Fichier | Vue |
 |---|---|
-| `01-dashboard.png` | Dashboard complet (thème Command Grid, métriques réseau, score) |
-| `02-carte-reseau.png` | Carte réseau interactive + traceroute carte du monde |
-| `03-bouclier.png` | Onglet Bouclier — table des connexions notées |
-| `04-recon.png` | Onglet Recon — scan nmap + CVE |
-| `05-soc.png` | Onglet SOC local — HIDS + Mail Security |
-| `06-remediation.png` | Onglet Remédiation — MITRE / threat-intel |
+| `01-dashboard.png` | Dashboard — vue d'ensemble temps réel |
+| `02-carte-reseau.png` | Carte réseau — graphe interactif |
+| `03-carte-monde.png` | Carte du monde — traceroute géolocalisé |
+| `04-bouclier.png` | Bouclier — connexions notées & MITRE |
+| `05-recon.png` | Recon — nmap + CVE (NVD) + découverte LAN |
+| `06-soc.png` | SOC local — Mail, HIDS & Defender |
+| `07-sante.png` | Santé — bilan du poste (esprit CCleaner) |
+| `08-connecteurs.png` | Connecteurs — VirusTotal / SIEM / IMAP / LLM |
+| `09-diagnostic.png` | Diagnostic — journal, beaconing, timeline |
+| `10-ports-ecoute.png` | Ports en écoute — surface d'exposition entrante |
 
-**Conseils** : format PNG, largeur ~1600 px, thème sombre, sans donnée personnelle
-sensible visible (IP publiques, hostnames privés) — floute si besoin.
+_Pour rafraîchir une capture : remplace le PNG en gardant le même nom._

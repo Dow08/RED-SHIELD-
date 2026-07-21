@@ -10,7 +10,7 @@ Une vision d'ensemble de ma machine en temps réel, et des briques que j'active 
 
 [![Licence : PolyForm Noncommercial](https://img.shields.io/badge/licence-PolyForm%20Noncommercial%201.0.0-orange)](LICENSE)
 [![Sécurité : Trivy](https://img.shields.io/badge/s%C3%A9curit%C3%A9-Trivy%20CI-blue)](.github/workflows/trivy.yml)
-![Tests](https://img.shields.io/badge/tests-82%20pytest%20%2B%207%20vitest-brightgreen)
+![Tests](https://img.shields.io/badge/tests-93%20pytest%20%2B%207%20vitest-brightgreen)
 ![Backend](https://img.shields.io/badge/backend-Python%203.11%2B%20·%20FastAPI-3776AB)
 ![Frontend](https://img.shields.io/badge/frontend-React%2018%20·%20Vite%20·%20Tailwind-61DAFB)
 ![Desktop](https://img.shields.io/badge/desktop-Tauri%20v2-24C8DB)
@@ -63,21 +63,21 @@ Le résultat, c'est **RED SHIELD** : un **bouclier réseau modulaire**, pensé c
 
 ## 📸 Captures d'écran
 
-> _Les captures viennent ici — un PNG par fonctionnalité, à déposer dans [`docs/screenshots/`](docs/screenshots/) aux noms indiqués._
+_Thème « Command Grid », données réelles (rien d'inventé). Air-gapped actif._
 
-| Dashboard — vue d'ensemble (Command Grid) | Bouclier — connexions notées |
+| Dashboard — vue d'ensemble temps réel | Bouclier — connexions notées & MITRE |
 |:---:|:---:|
-| ![Dashboard](docs/screenshots/01-dashboard.png) | ![Bouclier](docs/screenshots/02-bouclier.png) |
-| **Carte réseau — graphe interactif** | **Carte du monde — traceroute & flux** |
-| ![Carte réseau](docs/screenshots/03-carte-reseau.png) | ![Carte du monde](docs/screenshots/04-carte-monde.png) |
-| **Remédiation — MITRE & threat-intel** | **Conformité — assistant CISO (GRC)** |
-| ![Remédiation](docs/screenshots/05-remediation.png) | ![Conformité](docs/screenshots/06-conformite.png) |
-| **Recon — nmap + CVE (NVD) + OSI** | **Offensif — WiFi & cracker de hash** |
-| ![Recon](docs/screenshots/07-recon.png) | ![Offensif](docs/screenshots/08-offensif.png) |
-| **SOC local — HIDS, Defender & Mail** | **Santé — bilan du poste (esprit CCleaner)** |
-| ![SOC](docs/screenshots/09-soc.png) | ![Santé](docs/screenshots/10-sante.png) |
-| **Connecteurs — SIEM / IMAP / LLM chiffrés** | **Diagnostic — timeline, beaconing, historique** |
-| ![Connecteurs](docs/screenshots/11-connecteurs.png) | ![Diagnostic](docs/screenshots/12-diagnostic.png) |
+| ![Dashboard](docs/screenshots/01-dashboard.png) | ![Bouclier](docs/screenshots/04-bouclier.png) |
+| **Carte réseau — graphe interactif** | **Carte du monde — traceroute géolocalisé** |
+| ![Carte réseau](docs/screenshots/02-carte-reseau.png) | ![Carte du monde](docs/screenshots/03-carte-monde.png) |
+| **Ports en écoute — surface d'exposition** | **Recon — nmap + CVE (NVD) + LAN** |
+| ![Ports en écoute](docs/screenshots/10-ports-ecoute.png) | ![Recon](docs/screenshots/05-recon.png) |
+| **SOC local — Mail, HIDS & Defender** | **Santé — bilan du poste (esprit CCleaner)** |
+| ![SOC](docs/screenshots/06-soc.png) | ![Santé](docs/screenshots/07-sante.png) |
+| **Connecteurs — VT / SIEM / IMAP / LLM chiffrés** | **Diagnostic — journal, beaconing, timeline** |
+| ![Connecteurs](docs/screenshots/08-connecteurs.png) | ![Diagnostic](docs/screenshots/09-diagnostic.png) |
+
+> D'autres vues (Remédiation, Conformité/GRC, Offensif) sont disponibles directement dans l'application.
 
 ---
 
@@ -206,6 +206,13 @@ Puis j'ouvre **http://localhost:5173** — le dashboard proxifie `/api` vers le 
 ```
 Sans admin, l'application fonctionne et retombe sur le proxy « nombre de connexions ».
 
+### Packages installables (installeur Windows & APK Android)
+Les launchers sont compilés en **CI GitHub Actions** (runners sans contrainte de signature locale) :
+- **Desktop** — workflow **« Build desktop (Tauri + sidecar) »** → installeur Windows **NSIS** (moteur Python embarqué en sidecar).
+- **Mobile** — workflow **« Build mobile (Android APK) »** → **APK Android** (moteur autonome embarqué, hors-ligne).
+
+Onglet **Actions** → choisir le workflow → **Run workflow** → l'artefact (installeur / APK) est publié en fin de run.
+
 ---
 
 ## 🔒 Sécurité & confidentialité
@@ -223,7 +230,7 @@ Sans admin, l'application fonctionne et retombe sur le proxy « nombre de connex
 
 ```bash
 # Backend
-cd engine && .venv/Scripts/python.exe -m pytest -q      # 82 tests
+cd engine && .venv/Scripts/python.exe -m pytest -q      # 93 tests
 
 # Frontend
 cd ui && npx vitest run                                  # 7 tests
