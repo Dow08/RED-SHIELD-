@@ -409,12 +409,18 @@ def create_app() -> FastAPI:
 
     @app.post("/connectors/{name}")
     def connectors_set(name: str, req: KeyReq):
-        _require("connectors").set(name, req.key)
+        try:
+            _require("connectors").set(name, req.key)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
         return {"ok": True, "name": name}
 
     @app.delete("/connectors/{name}")
     def connectors_delete(name: str):
-        _require("connectors").delete(name)
+        try:
+            _require("connectors").delete(name)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
         return {"ok": True, "name": name}
 
     @app.get("/intel/ip")
