@@ -87,6 +87,9 @@ export interface TempInfo { path: string; size_mb: number; files: number; }
 export interface StartupItem { name: string; command: string; source: string; }
 export interface HealthReport { available: boolean; platform_ok: boolean; disks: DiskInfo[]; temp_paths: TempInfo[]; temp_total_mb: number; startup: StartupItem[]; pending_reboot: boolean; reboot_reasons: string[]; recommendations: string[]; running: boolean; }
 export interface CleanResult { dry_run: boolean; reclaimable_mb: number; freed_mb: number; deleted_files: number; errors: number; }
+export interface AppUpdate { name: string; id: string; current: string; available: string; source: string; }
+export interface UpdaterResult { available_tool: boolean; reason: string; updates: AppUpdate[]; running: boolean; }
+export interface UpgradeResult { ok: boolean; dry_run?: boolean; command?: string; output?: string; error?: string; returncode?: number; }
 
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(BASE + path);
@@ -162,6 +165,9 @@ export const api = {
   healthReport: () => get<HealthReport>("/health/report"),
   healthRun: () => post<{ ok: boolean }>("/health/run", {}),
   healthClean: (dry_run: boolean) => post<CleanResult>("/health/clean", { dry_run }),
+  updaterList: () => get<UpdaterResult>("/updater/list"),
+  updaterRun: () => post<{ ok: boolean }>("/updater/run", {}),
+  updaterUpgrade: (id: string, dry_run: boolean) => post<UpgradeResult>("/updater/upgrade", { id, dry_run }),
   reportUrl: BASE + "/report/markdown",
   logsExportUrl: BASE + "/diagnostic/logs/export",
 };

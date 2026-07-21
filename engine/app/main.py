@@ -40,6 +40,7 @@ from app.modules.scan import ScanModule, ScanRequest
 from app.modules.scoring import ScoringModule
 from app.modules.shield import ShieldModule
 from app.modules.siem import SiemModule
+from app.modules.updater import UpdaterModule
 from app.modules.throughput import ThroughputModule
 from app.modules.trace import TraceModule
 from app.modules.wifi import WifiModule
@@ -69,6 +70,11 @@ class CleanReq(BaseModel):
     dry_run: bool = True
 
 
+class UpgradeReq(BaseModel):
+    id: str
+    dry_run: bool = True
+
+
 def register_modules(registry: Registry, bus: EventBus) -> None:
     """Enregistre les modules concrets (rempli au fil des étapes du Jalon 1).
 
@@ -88,6 +94,7 @@ def register_modules(registry: Registry, bus: EventBus) -> None:
     registry.register(FirewallModule(bus))
     registry.register(LanModule(bus))
     registry.register(HealthModule(bus))
+    registry.register(UpdaterModule(bus))
     registry.register(ScanModule(bus))
     registry.register(ProcVulnModule(bus))
     registry.register(HidsModule(bus))
@@ -394,6 +401,27 @@ def create_app() -> FastAPI:
         persist = registry.get("persistence")
         if persist is not None and persist.health() == ModuleStatus.ACTIVE and not req.dry_run:
             persist.add_audit("health_clean", f"{result.deleted_files} fichiers, {result.freed_mb} Mo")
+        return result
+
+    @app.get("/updater/list")
+    def updater_list():
+        module = registry.get("updater")
+        return module.get() if module is not None else {"available_tool": False}
+
+    @app.post("/updater/run")
+    def updater_run():
+        module = registry.get("updater")
+        return module.run_async() if module is not None else {"ok": False}
+
+    @app.post("/updater/upgrade")
+    def updater_upgrade(req: UpgradeReq):
+        module = registry.get("updater")
+        if module is None:
+            raise HTTPException(status_code=503, detail="module updater indisponible")
+        result = module.upgrade(req.id, dry_run=req.dry_run)
+        persist = registry.get("persistence")
+        if persist is not None and persist.health() == ModuleStatus.ACTIVE and not req.dry_run:
+            persist.add_audit("app_upgrade", req.id)
         return result
 
     @app.get("/lan/devices")

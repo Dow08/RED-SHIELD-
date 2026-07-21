@@ -1087,12 +1087,22 @@ function Diagnostic({ logs, history, timeline, beaconing, config }: { logs: any[
 }
 
 /* ============ SANTÉ (bilan poste, esprit CCleaner) ============ */
-function Health({ report }: { report: import("./api").HealthReport | null }) {
+function UpgradeButton({ id }: { id: string }) {
+  const [stage, setStage] = useState<"idle" | "confirm" | "busy" | "done">("idle");
+  const [msg, setMsg] = useState("");
+  const dry = async () => { try { const r = await api.updaterUpgrade(id, true); setMsg(r.command || ""); setStage("confirm"); } catch { setMsg("moteur injoignable"); } };
+  const apply = async () => { setStage("busy"); setMsg("Installation en cours (winget)…"); try { const r = await api.updaterUpgrade(id, false); setMsg(r.ok ? "Mis à jour ✅" : (r.error || `échec (code ${r.returncode ?? "?"})`)); } catch { setMsg("échec"); } setStage("done"); };
+  if (stage === "idle") return <button className="btn ghost" style={{ padding: "4px 9px", fontSize: 11 }} onClick={dry}>Mettre à jour</button>;
+  if (stage === "confirm") return <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}><button className="btn" style={{ padding: "4px 9px", fontSize: 11 }} onClick={apply}>Confirmer</button><button className="btn ghost" style={{ padding: "4px 9px", fontSize: 11 }} onClick={() => setStage("idle")}>Annuler</button></span>;
+  return <span style={{ color: stage === "busy" ? "var(--soft)" : "var(--safe)", fontSize: 11 }}>{msg}</span>;
+}
+function Health({ report, updater }: { report: import("./api").HealthReport | null; updater: import("./api").UpdaterResult | null }) {
   const [clean, setClean] = useState<import("./api").CleanResult | null>(null);
   const [stage, setStage] = useState<"idle" | "confirm" | "done">("idle");
   const [busy, setBusy] = useState(false);
   const r = report;
-  useEffect(() => { api.healthRun().catch(() => {}); }, []);
+  const upd = updater;
+  useEffect(() => { api.healthRun().catch(() => {}); api.updaterRun().catch(() => {}); }, []);
   const dc = (p: number) => (p >= 90 ? "var(--crit)" : p >= 75 ? "var(--watch)" : "var(--safe)");
   const dry = async () => { setBusy(true); try { const res = await api.healthClean(true); setClean(res); setStage("confirm"); } catch { /* noop */ } setBusy(false); };
   const apply = async () => { setBusy(true); try { const res = await api.healthClean(false); setClean(res); setStage("done"); await api.healthRun(); } catch { /* noop */ } setBusy(false); };
@@ -1138,6 +1148,30 @@ function Health({ report }: { report: import("./api").HealthReport | null }) {
         </Card>
       </div>
       <div className="col">
+        <Card title="Mises à jour des applications" right={<><span style={{ marginRight: 8, color: (upd?.updates.length ?? 0) ? "var(--watch)" : "var(--safe)" }}>{upd?.updates.length ?? 0} dispo</span><button className="btn ghost" style={{ padding: "5px 10px" }} onClick={() => api.updaterRun()}>Vérifier</button></>}>
+          <div className="note">Via <b>winget</b> (gestionnaire officiel Microsoft) — sources connues, aucun tiers opaque. Vérifie le versionnage de tes applis et installe la mise à jour (dry-run → confirmation, jamais automatique).</div>
+          {!upd ? <div className="empty">Chargement…</div>
+            : !upd.available_tool ? <div className="empty">{upd.reason || "winget introuvable (Windows 10/11)"}</div>
+              : upd.running && upd.updates.length === 0 ? <div className="empty">Recherche des mises à jour…</div>
+                : upd.updates.length === 0 ? <div className="disc" style={{ color: "var(--safe)", padding: "10px 16px" }}>✅ Toutes tes applications sont à jour.</div>
+                  : (
+                    <div className="tscroll">
+                      <table>
+                        <thead><tr><th>Application</th><th>Version</th><th>Disponible</th><th>Action</th></tr></thead>
+                        <tbody>
+                          {upd.updates.map((u) => (
+                            <tr key={u.id}>
+                              <td><span className="proc">{u.name}</span><div className="pid mono" style={{ fontSize: 10 }}>{u.id}</div></td>
+                              <td className="mono muted">{u.current}</td>
+                              <td className="mono" style={{ color: "var(--watch)" }}>{u.available}</td>
+                              <td><UpgradeButton id={u.id} /></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+        </Card>
         <Card title="Programmes au démarrage" right={r ? String(r.startup.length) : ""}>
           <div className="note">Applications lancées au démarrage de Windows (registre + dossier Démarrage). En désactiver depuis le Gestionnaire des tâches accélère le boot.</div>
           {(r?.startup || []).map((s, i) => (
@@ -1198,6 +1232,7 @@ export default function App() {
   const connectors = usePolling(api.connectors, 6000);
   const config = usePolling(api.config, 15000);
   const healthRep = usePolling(api.healthReport, 12000, tab === "sante");
+  const updater = usePolling(api.updaterList, 20000, tab === "sante");
   const [traceLabel, setTraceLabel] = useState("");
   const runTrace = (t: string) => { setTraceTarget(t); api.traceRun(t); };
   const selectEndpoint = (ip: string) => {
@@ -1265,7 +1300,7 @@ export default function App() {
       {tab === "recon" && <Recon lan={lan.data} scan={scan.data} procvuln={procvuln.data} onScan={(t, m) => api.scanRun(t, m)} />}
       {tab === "offensif" && <Offensif airgapped={airgapped} wifi={wifi.data} />}
       {tab === "soc" && <Soc hids={hids.data} defender={defender.data} />}
-      {tab === "sante" && <Health report={healthRep.data} />}
+      {tab === "sante" && <Health report={healthRep.data} updater={updater.data} />}
       {tab === "connecteurs" && <Connecteurs airgapped={airgapped} connectors={connectors.data || []} onRefresh={() => api.connectors().then((d) => (connectors.data = d)).catch(() => {})} />}
       {tab === "diagnostic" && <Diagnostic logs={logs.data || []} history={history.data || []} timeline={timeline.data || []} beaconing={beaconing.data || []} config={config.data} />}
 
