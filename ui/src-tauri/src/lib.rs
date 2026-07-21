@@ -20,17 +20,22 @@ pub fn run() {
       }
       // Démarre le moteur RED SHIELD (sidecar) lié à 127.0.0.1:8787 — encapsulé,
       // invisible pour l'utilisateur (aucune URL/navigateur exposé).
-      let sidecar = app.shell().sidecar("red-engine")?;
-      let (mut rx, child) = sidecar.spawn()?;
-      app.manage(EngineChild(Mutex::new(Some(child))));
-      tauri::async_runtime::spawn(async move {
-        use tauri_plugin_shell::process::CommandEvent;
-        while let Some(event) = rx.recv().await {
-          if let CommandEvent::Stderr(line) = event {
-            log::info!("engine: {}", String::from_utf8_lossy(&line));
+      // DESKTOP UNIQUEMENT : sur mobile, le moteur est embarqué côté client
+      // (ui/src/mobile/offline.ts), il n'y a pas de sidecar Python.
+      #[cfg(desktop)]
+      {
+        let sidecar = app.shell().sidecar("red-engine")?;
+        let (mut rx, child) = sidecar.spawn()?;
+        app.manage(EngineChild(Mutex::new(Some(child))));
+        tauri::async_runtime::spawn(async move {
+          use tauri_plugin_shell::process::CommandEvent;
+          while let Some(event) = rx.recv().await {
+            if let CommandEvent::Stderr(line) = event {
+              log::info!("engine: {}", String::from_utf8_lossy(&line));
+            }
           }
-        }
-      });
+        });
+      }
       Ok(())
     })
     .build(tauri::generate_context!())
