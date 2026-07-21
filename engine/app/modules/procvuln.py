@@ -7,13 +7,13 @@ renvoyée (ou air-gapped actif), c'est indiqué tel quel, jamais inventé.
 """
 from __future__ import annotations
 
-import subprocess
 import sys
 import threading
 
 import psutil
 from pydantic import BaseModel
 
+from app.core import proc
 from app.core.bus import EventBus
 from app.modules import cve as cve_online
 from app.modules.base import Module, ModuleStatus
@@ -87,10 +87,9 @@ class ProcVulnModule(Module):
         arr = ",".join("'" + e.replace("'", "''") + "'" for e in exes[:40])
         cmd = ("@(" + arr + ") | ForEach-Object { try { $v=(Get-Item -LiteralPath $_).VersionInfo; "
                "[PSCustomObject]@{Path=$_;Product=$v.ProductName;Version=$v.ProductVersion} } catch {} } | ConvertTo-Json -Depth 2")
+        ok, stdout = proc.powershell(cmd, timeout=30)
         try:
-            p = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", cmd],
-                               capture_output=True, text=True, timeout=30, encoding="utf-8", errors="replace")
-            data = json.loads(p.stdout or "null")
+            data = json.loads(stdout or "null")
         except Exception:
             return {}
         if isinstance(data, dict):

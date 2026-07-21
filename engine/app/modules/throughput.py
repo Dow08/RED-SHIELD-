@@ -22,6 +22,7 @@ import time
 import psutil
 from pydantic import BaseModel
 
+from app.core import proc
 from app.core.bus import EventBus
 from app.modules.base import Module, ModuleStatus
 
@@ -168,10 +169,7 @@ class ThroughputModule(Module):
             except Exception:
                 pass
         if sys.platform.startswith("win") and self._admin and self._pktmon:
-            try:
-                subprocess.run(["pktmon", "stop"], capture_output=True, timeout=10)
-            except Exception:
-                pass
+            proc.run(["pktmon", "stop"], timeout=10)
         super().stop()
 
     @staticmethod
@@ -218,6 +216,7 @@ class ThroughputModule(Module):
             self._proc = subprocess.Popen(
                 self._capture_cmd(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 text=True, encoding="utf-8", errors="replace", bufsize=1,
+                creationflags=proc.NO_WINDOW,
             )
         except Exception as exc:
             self._degraded(f"échec démarrage pktmon : {exc}")

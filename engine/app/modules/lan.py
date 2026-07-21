@@ -7,10 +7,10 @@ complète = amélioration ultérieure).
 from __future__ import annotations
 
 import re
-import subprocess
 
 from pydantic import BaseModel
 
+from app.core import proc
 from app.modules.base import Module, ModuleStatus
 
 # Sous-ensemble d'OUI courants (préfixe MAC → fabricant). Couverture partielle assumée.
@@ -60,8 +60,5 @@ class LanModule(Module):
         return devices
 
     def devices(self) -> list[LanDevice]:
-        try:
-            p = subprocess.run(["arp", "-a"], capture_output=True, text=True, timeout=15, encoding="utf-8", errors="replace")
-        except Exception:
-            return []
-        return self.parse(p.stdout or "")
+        _ok, stdout, _err = proc.run(["arp", "-a"], timeout=15)
+        return self.parse(stdout or "")

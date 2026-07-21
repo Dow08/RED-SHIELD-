@@ -7,11 +7,11 @@ les droits administrateur pour appliquer réellement.
 from __future__ import annotations
 
 import ipaddress
-import subprocess
 import sys
 
 from pydantic import BaseModel
 
+from app.core import proc
 from app.core.bus import EventBus
 from app.modules.base import Module, ModuleStatus
 
@@ -48,17 +48,13 @@ class FirewallModule(Module):
         return f"RED-block-{ip}"
 
     def _run(self, cmd: list[str], ip: str, action: str) -> dict:
-        try:
-            p = subprocess.run(cmd, capture_output=True, text=True, timeout=15, encoding="utf-8", errors="replace")
-            combined = f"{p.stdout}{p.stderr}".lower()
-            ok = p.returncode == 0
-            self.bus.publish("log", {"level": "warn" if ok else "error", "module": self.name,
-                                     "message": f"{action} {ip}: {'appliqué' if ok else 'échec'}"})
-            if not ok and ("admin" in combined or "requis" in combined or "elevation" in combined or "élev" in combined):
-                return {"ok": False, "error": "nécessite les droits administrateur (lancer RED en admin)"}
-            return {"ok": ok, "output": (p.stdout or p.stderr).strip()[:400]}
-        except Exception as exc:
-            return {"ok": False, "error": str(exc)}
+        ok, stdout, stderr = proc.run(cmd, timeout=15)
+        combined = f"{stdout}{stderr}".lower()
+        self.bus.publish("log", {"level": "warn" if ok else "error", "module": self.name,
+                                 "message": f"{action} {ip}: {'appliqué' if ok else 'échec'}"})
+        if not ok and ("admin" in combined or "requis" in combined or "elevation" in combined or "élev" in combined):
+            return {"ok": False, "error": "nécessite les droits administrateur (lancer RED en admin)"}
+        return {"ok": ok, "output": (stdout or stderr).strip()[:400]}
 
     def block(self, ip: str, dry_run: bool = True) -> dict:
         if not _valid_ip(ip):
@@ -107,13 +103,9 @@ class FirewallModule(Module):
     def list_rules(self) -> list[str]:
         if self.health() != ModuleStatus.ACTIVE:
             return []
-        try:
-            p = subprocess.run(["netsh", "advfirewall", "firewall", "show", "rule", "name=all"],
-                               capture_output=True, text=True, timeout=15, encoding="utf-8", errors="replace")
-        except Exception:
-            return []
+        _ok, stdout, _err = proc.run(["netsh", "advfirewall", "firewall", "show", "rule", "name=all"], timeout=15)
         out: list[str] = []
-        for line in p.stdout.splitlines():
+        for line in stdout.splitlines():
             low = line.strip().lower()
             if low.startswith("rule name") or low.startswith("nom de la règle"):
                 name = line.split(":", 1)[1].strip() if ":" in line else ""

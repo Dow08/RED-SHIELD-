@@ -9,12 +9,12 @@ from __future__ import annotations
 import os
 import re
 import shutil
-import subprocess
 import threading
 import xml.etree.ElementTree as ET
 
 from pydantic import BaseModel
 
+from app.core import proc
 from app.core.bus import EventBus
 from app.modules import cve as cve_online
 from app.modules.base import Module, ModuleStatus
@@ -206,15 +206,12 @@ class ScanModule(Module):
     def _run(self, target: str, mode: str) -> None:
         with self._lock:
             self._last = ScanResult(target=target, mode=mode, running=True, nmap_available=True)
-        try:
-            proc = subprocess.run(self._cmd(target, mode), capture_output=True, text=True,
-                                  timeout=180, encoding="utf-8", errors="replace")
-            hosts = self.parse(proc.stdout or "") if proc.stdout else []
+        ok, stdout, err = proc.run(self._cmd(target, mode), timeout=180)
+        if ok or stdout:
+            hosts = self.parse(stdout or "") if stdout else []
             result = ScanResult(target=target, mode=mode, hosts=hosts, running=False, nmap_available=True)
-        except subprocess.TimeoutExpired:
-            result = ScanResult(target=target, mode=mode, running=False, error="timeout", nmap_available=True)
-        except Exception as exc:
-            result = ScanResult(target=target, mode=mode, running=False, error=str(exc), nmap_available=True)
+        else:
+            result = ScanResult(target=target, mode=mode, running=False, error=err or "échec", nmap_available=True)
         with self._lock:
             self._last = result
             self._running = False

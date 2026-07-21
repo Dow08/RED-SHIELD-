@@ -16,13 +16,13 @@ import glob
 import heapq
 import json
 import os
-import subprocess
 import sys
 import time
 
 import psutil
 from pydantic import BaseModel
 
+from app.core import proc
 from app.core.bus import EventBus
 from app.modules.base import Module, ModuleStatus
 
@@ -486,15 +486,12 @@ class HealthModule(Module):
         if not sys.platform.startswith("win"):
             return {"ok": False, "error": "Windows uniquement"}
         desc = "".join(c for c in description if c.isalnum() or c in " -_")[:60]
-        try:
-            p = subprocess.run(
-                ["powershell", "-NoProfile", "-NonInteractive", "-Command",
-                 f'Checkpoint-Computer -Description "{desc}" -RestorePointType MODIFY_SETTINGS'],
-                capture_output=True, text=True, timeout=120, encoding="utf-8", errors="replace")
-            if p.returncode == 0:
-                self.bus.publish("log", {"level": "warn", "module": self.name, "message": "point de restauration créé"})
-                return {"ok": True}
-            return {"ok": False, "error": (p.stderr or p.stdout or "échec").strip()[:300] +
-                    " (nécessite admin + Protection système activée)"}
-        except Exception as exc:
-            return {"ok": False, "error": str(exc)}
+        ok, out, err = proc.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command",
+             f'Checkpoint-Computer -Description "{desc}" -RestorePointType MODIFY_SETTINGS'],
+            timeout=120)
+        if ok:
+            self.bus.publish("log", {"level": "warn", "module": self.name, "message": "point de restauration créé"})
+            return {"ok": True}
+        return {"ok": False, "error": (err or out or "échec").strip()[:300] +
+                " (nécessite admin + Protection système activée)"}

@@ -8,12 +8,12 @@ fond avec cache (les cmdlets Defender peuvent être lents).
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 import threading
 
 from pydantic import BaseModel
 
+from app.core import proc
 from app.core.bus import EventBus
 from app.modules.base import Module, ModuleStatus
 
@@ -42,15 +42,8 @@ class DefenderStatus(BaseModel):
 
 
 def _ps(cmd: str, timeout: int = 25) -> tuple[bool, str]:
-    """Exécute une commande PowerShell et renvoie (ok, stdout)."""
-    try:
-        p = subprocess.run(
-            ["powershell", "-NoProfile", "-NonInteractive", "-Command", cmd],
-            capture_output=True, text=True, timeout=timeout, encoding="utf-8", errors="replace",
-        )
-        return (p.returncode == 0, p.stdout or "")
-    except Exception:
-        return (False, "")
+    """Exécute une commande PowerShell et renvoie (ok, stdout). Cf. core.proc (durci)."""
+    return proc.powershell(cmd, timeout=timeout)
 
 
 class DefenderModule(Module):

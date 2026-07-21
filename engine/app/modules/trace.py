@@ -10,12 +10,12 @@ import ipaddress
 import os
 import re
 import socket
-import subprocess
 import sys
 import threading
 
 from pydantic import BaseModel
 
+from app.core import proc
 from app.core.bus import EventBus
 from app.modules.base import Module, ModuleStatus
 
@@ -179,21 +179,16 @@ class TraceModule(Module):
     def _run(self, target: str) -> None:
         with self._lock:
             self._cache[target] = TraceResult(target=target, geo_available=self.geo_available, running=True)
-        try:
-            proc = subprocess.run(
-                self._cmd(target), capture_output=True, text=True, timeout=90, encoding="utf-8", errors="replace"
-            )
-            hops = self.parse(proc.stdout or "")
+        ok, stdout, err = proc.run(self._cmd(target), timeout=90)
+        if ok or stdout:
+            hops = self.parse(stdout or "")
             vpn_active, vpn_adapter = self.detect_vpn()
             public = next((h.ip for h in hops if not h.private), None)
             result = TraceResult(target=target, hops=hops, public_ip=public, vpn_active=vpn_active,
                                  vpn_adapter=vpn_adapter, geo_available=self.geo_available, running=False)
-        except subprocess.TimeoutExpired:
-            result = TraceResult(target=target, geo_available=self.geo_available, running=False, error="timeout")
-        except FileNotFoundError:
-            result = TraceResult(target=target, geo_available=self.geo_available, running=False, error="tracert introuvable")
-        except Exception as exc:
-            result = TraceResult(target=target, geo_available=self.geo_available, running=False, error=str(exc))
+        else:
+            msg = "tracert introuvable" if err == "exécutable introuvable" else (err or "échec")
+            result = TraceResult(target=target, geo_available=self.geo_available, running=False, error=msg)
         with self._lock:
             self._cache[target] = result
             self._running.discard(target)

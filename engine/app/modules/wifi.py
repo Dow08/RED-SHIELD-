@@ -6,11 +6,11 @@ détection des réseaux ouverts/faibles. Recon/audit défensif, pas de cracking.
 """
 from __future__ import annotations
 
-import subprocess
 import sys
 
 from pydantic import BaseModel
 
+from app.core import proc
 from app.core.bus import EventBus
 from app.modules.base import Module, ModuleStatus
 
@@ -54,9 +54,8 @@ class WifiModule(Module):
         self.set_status(ModuleStatus.ACTIVE)
 
     def _netsh(self, args: list[str]) -> str:
-        proc = subprocess.run(["netsh", "wlan", *args], capture_output=True, text=True,
-                              timeout=20, encoding="utf-8", errors="replace")
-        return proc.stdout or ""
+        _ok, stdout, _err = proc.run(["netsh", "wlan", *args], timeout=20)
+        return stdout or ""
 
     def parse_networks(self, output: str) -> list[WifiNetwork]:
         nets: list[WifiNetwork] = []

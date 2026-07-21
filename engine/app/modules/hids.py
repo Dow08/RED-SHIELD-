@@ -8,12 +8,12 @@ Exécution en tâche de fond avec cache.
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 import threading
 
 from pydantic import BaseModel
 
+from app.core import proc
 from app.core.bus import EventBus
 from app.modules.base import Module, ModuleStatus
 
@@ -73,14 +73,8 @@ class HidsModule(Module):
             " Select-Object @{n='ts';e={$_.TimeCreated.ToString('o')}},@{n='id';e={$_.Id}},"
             "@{n='msg';e={($_.Message -replace '\\s+',' ')}} | ConvertTo-Json -Compress"
         )
-        try:
-            proc = subprocess.run(
-                ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps],
-                capture_output=True, text=True, timeout=20, encoding="utf-8", errors="replace",
-            )
-        except Exception:
-            return []
-        out = (proc.stdout or "").strip()
+        ok, stdout = proc.powershell(ps, timeout=20)
+        out = (stdout or "").strip()
         if not out:
             return []
         try:

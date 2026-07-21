@@ -9,11 +9,11 @@ from __future__ import annotations
 
 import re
 import shutil
-import subprocess
 import threading
 
 from pydantic import BaseModel
 
+from app.core import proc
 from app.core.bus import EventBus
 from app.modules.base import Module, ModuleStatus
 
@@ -101,14 +101,11 @@ class UpdaterModule(Module):
     def _collect(self) -> UpdaterResult:
         if not self._winget:
             return UpdaterResult(available_tool=False, reason="winget introuvable")
-        try:
-            p = subprocess.run(
-                [self._winget, "upgrade", "--accept-source-agreements", "--include-unknown"],
-                capture_output=True, text=True, timeout=90, encoding="utf-8", errors="replace",
-            )
-        except Exception as exc:
-            return UpdaterResult(available_tool=True, reason=str(exc))
-        updates = [AppUpdate(**u) for u in parse_upgrade_table(p.stdout or "")]
+        ok, stdout, err = proc.run(
+            [self._winget, "upgrade", "--accept-source-agreements", "--include-unknown"], timeout=90)
+        if not ok and not stdout:
+            return UpdaterResult(available_tool=True, reason=err or "échec winget")
+        updates = [AppUpdate(**u) for u in parse_upgrade_table(stdout or "")]
         return UpdaterResult(available_tool=True, updates=updates)
 
     def _run(self) -> None:
@@ -145,12 +142,11 @@ class UpdaterModule(Module):
         if not self._winget:
             return {"ok": False, "error": "winget introuvable"}
         try:
-            p = subprocess.run(cmd, capture_output=True, text=True, timeout=900, encoding="utf-8", errors="replace")
-            ok = p.returncode == 0
+            ok, stdout, stderr = proc.run(cmd, timeout=900)
+            if stderr == "timeout":
+                return {"ok": False, "error": "délai dépassé (installation trop longue)"}
             self.bus.publish("log", {"level": "warn" if ok else "error", "module": self.name,
                                      "message": f"maj {app_id}: {'ok' if ok else 'echec'}"})
-            return {"ok": ok, "output": (p.stdout or p.stderr).strip()[-600:], "returncode": p.returncode}
-        except subprocess.TimeoutExpired:
-            return {"ok": False, "error": "délai dépassé (installation trop longue)"}
+            return {"ok": ok, "output": (stdout or stderr).strip()[-600:], "returncode": 0 if ok else 1}
         except Exception as exc:
             return {"ok": False, "error": str(exc)}
