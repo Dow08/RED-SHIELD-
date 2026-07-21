@@ -33,7 +33,7 @@ jobs:
         run: |
           pyinstaller --onefile --name red-engine --collect-submodules app `
             --hidden-import app.main --collect-all uvicorn --collect-all keyring `
-            --collect-submodules psutil --add-data "data;data" `
+            --collect-submodules psutil `
             --distpath dist --workpath build_pyi --noconfirm run_engine.py
           New-Item -ItemType Directory -Force -Path ../ui/src-tauri/binaries | Out-Null
           Copy-Item dist/red-engine.exe ../ui/src-tauri/binaries/red-engine-x86_64-pc-windows-msvc.exe
