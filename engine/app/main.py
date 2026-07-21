@@ -67,7 +67,13 @@ class LlmReq(BaseModel):
 
 
 class CleanReq(BaseModel):
+    category: str = "temp"
     dry_run: bool = True
+
+
+class StartupReq(BaseModel):
+    name: str
+    enabled: bool
 
 
 class UpgradeReq(BaseModel):
@@ -397,10 +403,32 @@ def create_app() -> FastAPI:
         module = registry.get("health")
         if module is None:
             raise HTTPException(status_code=503, detail="module health indisponible")
-        result = module.clean_temp(dry_run=req.dry_run)
+        result = module.clean(req.category, dry_run=req.dry_run)
         persist = registry.get("persistence")
         if persist is not None and persist.health() == ModuleStatus.ACTIVE and not req.dry_run:
-            persist.add_audit("health_clean", f"{result.deleted_files} fichiers, {result.freed_mb} Mo")
+            persist.add_audit("health_clean", f"{req.category}: {result.deleted_files} fichiers, {result.freed_mb} Mo")
+        return result
+
+    @app.post("/health/startup")
+    def health_startup(req: StartupReq):
+        module = registry.get("health")
+        if module is None:
+            raise HTTPException(status_code=503, detail="module health indisponible")
+        result = module.set_startup(req.name, req.enabled)
+        persist = registry.get("persistence")
+        if persist is not None and persist.health() == ModuleStatus.ACTIVE and result.get("ok"):
+            persist.add_audit("health_startup", f"{req.name} enabled={req.enabled}")
+        return result
+
+    @app.post("/health/restore-point")
+    def health_restore_point():
+        module = registry.get("health")
+        if module is None:
+            raise HTTPException(status_code=503, detail="module health indisponible")
+        result = module.create_restore_point()
+        persist = registry.get("persistence")
+        if persist is not None and persist.health() == ModuleStatus.ACTIVE and result.get("ok"):
+            persist.add_audit("restore_point", "créé")
         return result
 
     @app.get("/updater/list")

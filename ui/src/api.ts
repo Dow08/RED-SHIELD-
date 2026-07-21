@@ -83,10 +83,12 @@ export interface OsintResult { available: boolean; reason?: string; error?: stri
 export interface LlmResult { ok: boolean; analysis?: string; error?: string; }
 export interface Snapshot { id: number; taken_at: string; exposure_score: number; band: string; total: number; safe: number; watch: number; suspect: number; crit: number; }
 export interface DiskInfo { device: string; mountpoint: string; total_gb: number; used_gb: number; free_gb: number; percent: number; }
-export interface TempInfo { path: string; size_mb: number; files: number; }
-export interface StartupItem { name: string; command: string; source: string; }
-export interface HealthReport { available: boolean; platform_ok: boolean; disks: DiskInfo[]; temp_paths: TempInfo[]; temp_total_mb: number; startup: StartupItem[]; pending_reboot: boolean; reboot_reasons: string[]; recommendations: string[]; running: boolean; }
-export interface CleanResult { dry_run: boolean; reclaimable_mb: number; freed_mb: number; deleted_files: number; errors: number; }
+export interface Cleanable { id: string; label: string; size_mb: number; files: number; admin: boolean; warn: string; }
+export interface StartupItem { name: string; command: string; source: string; enabled: boolean; }
+export interface BigFile { path: string; size_mb: number; }
+export interface ProcMem { process: string; mb: number; }
+export interface HealthReport { available: boolean; platform_ok: boolean; disks: DiskInfo[]; cleanables: Cleanable[]; cleanable_total_mb: number; startup: StartupItem[]; pending_reboot: boolean; reboot_reasons: string[]; windows_old: boolean; largest_files: BigFile[]; ram_percent: number; ram_total_gb: number; ram_used_gb: number; top_memory: ProcMem[]; recommendations: string[]; running: boolean; }
+export interface CleanResult { category: string; dry_run: boolean; reclaimable_mb: number; freed_mb: number; deleted_files: number; errors: number; error: string; }
 export interface AppUpdate { name: string; id: string; current: string; available: string; source: string; }
 export interface UpdaterResult { available_tool: boolean; reason: string; updates: AppUpdate[]; running: boolean; }
 export interface UpgradeResult { ok: boolean; dry_run?: boolean; command?: string; output?: string; error?: string; returncode?: number; }
@@ -164,7 +166,9 @@ export const api = {
   },
   healthReport: () => get<HealthReport>("/health/report"),
   healthRun: () => post<{ ok: boolean }>("/health/run", {}),
-  healthClean: (dry_run: boolean) => post<CleanResult>("/health/clean", { dry_run }),
+  healthClean: (category: string, dry_run: boolean) => post<CleanResult>("/health/clean", { category, dry_run }),
+  healthStartup: (name: string, enabled: boolean) => post<{ ok: boolean; error?: string }>("/health/startup", { name, enabled }),
+  healthRestorePoint: () => post<{ ok: boolean; error?: string }>("/health/restore-point", {}),
   updaterList: () => get<UpdaterResult>("/updater/list"),
   updaterRun: () => post<{ ok: boolean }>("/updater/run", {}),
   updaterUpgrade: (id: string, dry_run: boolean) => post<UpgradeResult>("/updater/upgrade", { id, dry_run }),
