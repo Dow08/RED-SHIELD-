@@ -28,6 +28,7 @@ from app.modules.llm import LlmModule
 from app.modules.osint import OsintModule
 from app.runtime import runtime
 from app.modules.firewall import FirewallModule, FwRequest, FwPortRequest
+from app.modules.grc import GrcModule
 from app.modules.health import HealthModule
 from app.modules.hids import HidsModule
 from app.modules.imapmail import ImapMailModule
@@ -81,6 +82,12 @@ class UpgradeReq(BaseModel):
     dry_run: bool = True
 
 
+class GrcControlReq(BaseModel):
+    id: str
+    status: str          # conforme / a_traiter / non_conforme / na / manuel / auto
+    note: str = ""
+
+
 def register_modules(registry: Registry, bus: EventBus) -> None:
     """Enregistre les modules concrets (rempli au fil des étapes du Jalon 1).
 
@@ -115,6 +122,40 @@ def register_modules(registry: Registry, bus: EventBus) -> None:
     registry.register(OsintModule(bus))
     registry.register(LlmModule(bus, connectors))
     registry.register(AnalyticsModule(bus, shield, scoring))
+
+    def _grc_signals() -> dict:
+        """Rassemble l'état réel de la machine pour l'auto-évaluation GRC (best-effort)."""
+        sig: dict = {"audit_logging": True, "monitoring": True}
+        try:
+            m = shield.metrics(geo=None)
+            sig["exposed_ports"] = m.listeners_exposed
+            sig["clear_flows"] = m.clear
+        except Exception:
+            pass
+        try:
+            sc = scoring.score_connections(shield.get_connections())
+            sig["suspect_conns"] = sum(1 for c in sc if getattr(c, "severity", "") in ("suspect", "crit"))
+        except Exception:
+            pass
+        d = registry.get("defender")
+        if d is not None:
+            try:
+                st = d.get()
+                sig["av_enabled"] = st.antivirus_enabled
+                sig["rt_protection"] = st.realtime_protection
+            except Exception:
+                pass
+        u = registry.get("updater")
+        if u is not None:
+            try:
+                res = u.get()
+                if getattr(res, "available_tool", False):
+                    sig["pending_updates"] = len(getattr(res, "updates", []) or [])
+            except Exception:
+                pass
+        return sig
+
+    registry.register(GrcModule(bus, _grc_signals))
 
 
 def create_app() -> FastAPI:
@@ -507,6 +548,28 @@ def create_app() -> FastAPI:
     def firewall_rules():
         module = registry.get("firewall")
         return module.list_rules() if module is not None else []
+
+    @app.get("/grc")
+    def grc_posture():
+        return _require("grc").posture()
+
+    @app.post("/grc/control")
+    def grc_set_control(req: GrcControlReq):
+        try:
+            result = _require("grc").set_control(req.id, req.status, req.note)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        persist = registry.get("persistence")
+        if persist is not None and persist.health() == ModuleStatus.ACTIVE:
+            persist.add_audit("grc_control", f"{req.id}={req.status}")
+        return result
+
+    @app.get("/grc/export", response_class=PlainTextResponse)
+    def grc_export():
+        return PlainTextResponse(
+            _require("grc").export(),
+            headers={"Content-Disposition": "attachment; filename=red-conformite.md"},
+        )
 
     @app.get("/report/markdown", response_class=PlainTextResponse)
     def report_markdown():

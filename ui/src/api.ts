@@ -93,6 +93,10 @@ export interface CleanResult { category: string; dry_run: boolean; reclaimable_m
 export interface AppUpdate { name: string; id: string; current: string; available: string; source: string; }
 export interface UpdaterResult { available_tool: boolean; reason: string; updates: AppUpdate[]; running: boolean; }
 export interface UpgradeResult { ok: boolean; dry_run?: boolean; command?: string; output?: string; error?: string; returncode?: number; }
+export type GrcStatus = "conforme" | "a_traiter" | "non_conforme" | "na" | "manuel";
+export interface GrcControl { id: string; domain: string; title: string; why: string; refs: Record<string, string>; remediation: string; families: string[]; signal: string | null; status: GrcStatus; finding: string; note: string; source: "auto" | "manuel"; }
+export interface GrcScore { framework: string; label: string; score: number; assessed: number; total: number; counts: Record<GrcStatus, number>; }
+export interface GrcPosture { frameworks: Record<string, string>; scores: GrcScore[]; controls: GrcControl[]; summary: { total: number; counts: Record<GrcStatus, number>; a_traiter_ids: string[] }; }
 
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(BASE + path);
@@ -186,6 +190,9 @@ export const api = {
   updaterList: () => get<UpdaterResult>("/updater/list"),
   updaterRun: () => post<{ ok: boolean }>("/updater/run", {}),
   updaterUpgrade: (id: string, dry_run: boolean) => post<UpgradeResult>("/updater/upgrade", { id, dry_run }),
+  grcPosture: () => get<GrcPosture>("/grc"),
+  grcSetControl: (id: string, status: string, note: string) => post<GrcPosture>("/grc/control", { id, status, note }),
+  grcExportUrl: BASE + "/grc/export",
   reportUrl: BASE + "/report/markdown",
   logsExportUrl: BASE + "/diagnostic/logs/export",
 };

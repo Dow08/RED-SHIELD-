@@ -19,6 +19,7 @@ ui/.vite/
 engine/data/*.db
 engine/data/*.mmdb
 engine/data/*.csv
+engine/data/grc_state.json
 
 # Build / packaging
 build/

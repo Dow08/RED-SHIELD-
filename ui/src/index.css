@@ -197,6 +197,9 @@ tbody tr:hover { background: rgba(47, 224, 208, 0.05); }
 .row { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--hair); flex-wrap: wrap; } .row:last-child { border-bottom: none; }
 .row .nm { min-width: 150px; font-weight: 600; color: var(--ink); } .row .ds { color: var(--faint); font-size: 11px; }
 input.key { background: var(--card-solid); border: 1px solid var(--card-b); border-radius: 6px; color: var(--ink); font-family: var(--mono); font-size: 12px; padding: 7px 10px; outline: none; width: 190px; letter-spacing: 0.2em; }
+select.key { background: var(--card-solid); border: 1px solid var(--card-b); border-radius: 6px; color: var(--ink); font-family: var(--mono); font-size: 12px; padding: 7px 10px; outline: none; cursor: pointer; }
+select.key:focus { border-color: var(--accent); }
+.grc-dom { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); padding: 10px 16px 4px; }
 .stt { font-family: var(--mono); font-size: 10px; padding: 3px 8px; border-radius: 5px; } .stt.off { color: var(--faint); border: 1px solid var(--card-b); } .stt.on { color: var(--safe); border: 1px solid var(--safe); }
 .note { padding: 12px 16px; color: var(--soft); font-size: 12px; background: rgba(251, 191, 36, 0.06); border-bottom: 1px solid var(--card-b); } .note b { color: var(--watch); }
 .seg { display: flex; border: 1px solid var(--card-b); border-radius: 6px; overflow: hidden; }
