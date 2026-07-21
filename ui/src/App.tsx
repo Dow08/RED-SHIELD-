@@ -853,6 +853,9 @@ function Soc({ hids, defender }: { hids: HidsResult | null; defender: import("./
   const [imapRes, setImapRes] = useState<import("./api").ImapResult | null>(null);
   const [imapBusy, setImapBusy] = useState(false);
   const [imapCfg, setImapCfg] = useState<{ configured: boolean; airgapped: boolean } | null>(null);
+  const [siemRes, setSiemRes] = useState<{ available: boolean; alerts: { time: string; level: string; rule: string; agent: string; description: string }[]; error?: string; reason?: string } | null>(null);
+  const [siemBusy, setSiemBusy] = useState(false);
+  const releverSiem = async () => { setSiemBusy(true); try { setSiemRes(await api.siemAlerts()); } catch { setSiemRes(null); } setSiemBusy(false); };
   useEffect(() => { api.hidsRun().catch(() => {}); api.defenderRun().catch(() => {}); api.imapStatus().then(setImapCfg).catch(() => {}); }, []); // lance les analyses à l'ouverture
   const relever = async () => { setImapBusy(true); try { setImapRes(await api.imapCheck()); } catch { setImapRes(null); } setImapBusy(false); };
   const onoff = (v: boolean | null) => (v === null ? { t: "?", c: "var(--faint)" } : v ? { t: "activée", c: "var(--safe)" } : { t: "désactivée", c: "var(--crit)" });
@@ -953,6 +956,16 @@ function Soc({ hids, defender }: { hids: HidsResult | null; defender: import("./
                 </>
               )}
         </Card>
+        <Card title="SIEM — alertes" right={<button className="btn ghost" style={{ padding: "5px 10px" }} disabled={siemBusy} onClick={releverSiem}>{siemBusy ? "Relève…" : "Relever"}</button>}>
+          <div className="note">Alertes rapatriées de ton SIEM (Wazuh/Elastic, configuré dans <b>Connecteurs</b>). Nécessite air-gapped OFF + instance joignable.</div>
+          {!siemRes ? <div className="empty">Clique « Relever » pour interroger le SIEM.</div>
+            : siemRes.reason ? <div className="empty">{siemRes.reason}</div>
+              : siemRes.error ? <div className="empty" style={{ color: "var(--crit)" }}>Erreur : {siemRes.error}</div>
+                : siemRes.alerts.length === 0 ? <div className="disc" style={{ color: "var(--safe)", padding: "8px 16px" }}>Aucune alerte remontée.</div>
+                  : siemRes.alerts.map((a, i) => (
+                    <div className="log" key={i}><span className="ts">{a.time.slice(0, 19).replace("T", " ")}</span><span className={`lv ${+a.level >= 10 ? "error" : +a.level >= 5 ? "warn" : "info"}`}>{a.level || "—"}</span><span className="ms">{a.rule} {a.agent && <span className="muted">({a.agent})</span>}</span></div>
+                  ))}
+        </Card>
       </div>
     </div>
   );
@@ -980,7 +993,7 @@ function imapAutodetect(email: string): { host: string; port: number } | null {
 function Connecteurs({ airgapped, connectors, onRefresh }: { airgapped: boolean; connectors: ConnectorStatus[]; onRefresh: () => void }) {
   const [keys, setKeys] = useState<Record<string, string>>({});
   const [llm, setLlm] = useState({ provider: "ollama", url: "http://localhost:11434", model: "llama3", key: "" });
-  const [siem, setSiem] = useState({ type: "wazuh", url: "", token: "" });
+  const [siem, setSiem] = useState({ type: "wazuh", url: "", username: "", password: "", token: "" });
   const [siemMsg, setSiemMsg] = useState("");
   const connected = (n: string) => connectors.find((c) => c.name === n)?.connected;
   const save = async (n: string) => { await api.connectorSet(n, keys[n] || ""); setKeys({ ...keys, [n]: "" }); onRefresh(); };
@@ -1016,18 +1029,20 @@ function Connecteurs({ airgapped, connectors, onRefresh }: { airgapped: boolean;
       <div className="disc" style={{ padding: "10px 16px" }}>💡 Ollama (local, gratuit, hors-ligne) fonctionne même sous air-gapped. Anthropic/OpenAI = clé perso + air-gapped OFF.</div>
 
       <div className="card-h" style={{ marginTop: 4 }}><h2>SIEM / EDR — récupération de logs</h2></div>
-      <div className="note">Connecte un <b>SIEM</b> pour rapatrier ses alertes (analyse + conseil de remédiation). L'<b>EDR local</b> de cette machine est déjà couvert par <b>Windows Defender</b> (onglet SOC). Nécessite <b>air-gapped OFF</b> + une instance joignable.</div>
+      <div className="note">Connecte un <b>SIEM</b> pour rapatrier ses alertes (analyse + conseil de remédiation). L'<b>EDR local</b> de cette machine est déjà couvert par <b>Windows Defender</b> (onglet SOC). Nécessite <b>air-gapped OFF</b> + une instance joignable. <b>Wazuh</b> : pointe vers l'<b>indexeur</b> (ex. <span className="mono">https://wazuh:9200</span>) avec identifiant/mot de passe → requête <span className="mono">wazuh-alerts-*/_search</span>.</div>
       <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
         <span className="nm">SIEM</span>
         <span className="seg">{["wazuh", "elastic", "generic"].map((p) => <button key={p} className={siem.type === p ? "on" : ""} onClick={() => setSiem({ ...siem, type: p })}>{p}</button>)}</span>
-        <input className="key" style={{ letterSpacing: 0, width: 240 }} value={siem.url} onChange={(e) => setSiem({ ...siem, url: e.target.value })} placeholder="URL API (ex. https://wazuh:55000/...)" />
-        <input className="key" type="password" style={{ width: 150 }} value={siem.token} onChange={(e) => setSiem({ ...siem, token: e.target.value })} placeholder="token / clé API" />
+        <input className="key" style={{ letterSpacing: 0, width: 220 }} value={siem.url} onChange={(e) => setSiem({ ...siem, url: e.target.value })} placeholder="URL indexeur (https://wazuh:9200)" />
+        <input className="key" style={{ letterSpacing: 0, width: 120 }} value={siem.username} onChange={(e) => setSiem({ ...siem, username: e.target.value })} placeholder="identifiant" />
+        <input className="key" type="password" style={{ width: 120 }} value={siem.password} onChange={(e) => setSiem({ ...siem, password: e.target.value })} placeholder="mot de passe" />
+        <input className="key" type="password" style={{ width: 120 }} value={siem.token} onChange={(e) => setSiem({ ...siem, token: e.target.value })} placeholder="ou token/ApiKey" />
         <button className="btn ghost" disabled={!siem.url.trim()} onClick={saveSiem}>Enregistrer</button>
         <button className="btn ghost" disabled={!connected("siem")} onClick={testSiem}>Tester</button>
         {connected("siem") ? <><span className="stt on">configuré ✓</span><button className="btn ghost" onClick={() => del("siem")}>Supprimer</button></> : <span className="stt off">non configuré</span>}
       </div>
       {siemMsg && <div className="disc" style={{ padding: "0 16px 10px", color: "var(--accent)" }}>{siemMsg}</div>}
-      <div className="disc" style={{ padding: "0 16px 14px" }}>Formats supportés : Wazuh (API REST), Elasticsearch (_search), ou tout endpoint JSON renvoyant une liste d'alertes. Les alertes rapatriées apparaissent dans le SOC.</div>
+      <div className="disc" style={{ padding: "0 16px 14px" }}>Wazuh / Elasticsearch (<span className="mono">_search</span>) ou tout endpoint JSON. Certificat auto-signé du lab accepté. Les alertes apparaissent dans le SOC.</div>
 
       <div className="card-h" style={{ marginTop: 4 }}><h2>Surveillance mail (IMAP)</h2></div>
       <div className="note">Analyse automatique de tes derniers mails (SPF/DKIM/DMARC, liens, pièces jointes) → alerte phishing/ransomware dans le <b>SOC</b>. <b>Serveur/port détectés automatiquement</b> depuis ton adresse (gmail, outlook, yahoo, orange, free…). Utilise un <b>mot de passe d'application</b> (jamais ton mot de passe principal), chiffré en keyring, jamais réaffiché. Lecture seule. Nécessite <b>air-gapped OFF</b>.</div>

@@ -41,6 +41,14 @@ def test_gate_not_configured(monkeypatch):
     assert res["available"] is False and "non configuré" in res["reason"]
 
 
+def test_build_search_url():
+    b = SiemModule.build_search_url
+    assert b({"url": "https://wazuh:9200", "type": "wazuh"}) == ("https://wazuh:9200/wazuh-alerts-*/_search", True)
+    assert b({"url": "https://es:9200/", "type": "elastic"}) == ("https://es:9200/_search", True)
+    assert b({"url": "https://x/logs.json", "type": "generic"}) == ("https://x/logs.json", False)
+    assert b({"url": "https://x/idx/_search", "type": "wazuh"}) == ("https://x/idx/_search", True)
+
+
 def test_normalize_formats():
     # Elastic
     el = {"hits": {"hits": [{"_source": {"@timestamp": "t1", "message": "evt", "level": "3"}}]}}

@@ -61,25 +61,54 @@ class SiemModule(Module):
             return {"ok": False, "reason": "connecteur SIEM non configuré (onglet Connecteurs)"}
         return None
 
+    @staticmethod
+    def _headers(cfg: dict) -> dict:
+        token = cfg.get("token") or ""
+        if not token:
+            return {}
+        return {"Authorization": (f"ApiKey {token}" if cfg.get("type") == "elastic" else f"Bearer {token}")}
+
+    @staticmethod
+    def build_search_url(cfg: dict) -> tuple[str, bool]:
+        """Détermine l'URL et le mode (POST _search vs GET) selon le type/URL.
+
+        Wazuh/Elastic → requête `_search` sur l'indexeur (les alertes Wazuh sont dans
+        l'index wazuh-alerts-*). Générique → GET direct.
+        """
+        url = (cfg.get("url") or "").rstrip("/")
+        typ = cfg.get("type", "generic")
+        if url.endswith("_search"):
+            return (url, True)
+        if typ == "wazuh":
+            return (f"{url}/wazuh-alerts-*/_search", True)
+        if typ == "elastic":
+            return (f"{url}/_search", True)
+        return (url, False)
+
+    def _fetch(self, cfg: dict, limit: int = 25):
+        url, is_search = self.build_search_url(cfg)
+        # Auth : basique (identifiants indexeur Wazuh) prioritaire, sinon token/ApiKey.
+        auth = None
+        if cfg.get("username") and cfg.get("password"):
+            auth = (cfg["username"], cfg["password"])
+        headers = self._headers(cfg)
+        # Labs Wazuh : certificat auto-signé fréquent → vérif TLS désactivable (défaut False).
+        verify = bool(cfg.get("verify", False))
+        if is_search:
+            body = {"size": limit, "sort": [{"@timestamp": {"order": "desc"}}], "query": {"match_all": {}}}
+            return httpx.post(url, json=body, headers=headers, auth=auth, timeout=20, verify=verify)
+        return httpx.get(url, headers=headers, auth=auth, timeout=20, verify=verify)
+
     def test(self) -> dict:
         blocked = self._gate()
         if blocked:
             return {"available": False, **blocked}
         cfg = self._config() or {}
         try:
-            r = httpx.get(cfg["url"], headers=self._headers(cfg), timeout=10, verify=cfg.get("verify", True))
-            return {"available": True, "ok": r.status_code < 500, "status_code": r.status_code, "type": cfg.get("type", "")}
+            r = self._fetch(cfg, limit=1)
+            return {"available": True, "ok": r.status_code < 400, "status_code": r.status_code, "type": cfg.get("type", "")}
         except Exception as exc:
             return {"available": True, "ok": False, "error": str(exc)}
-
-    @staticmethod
-    def _headers(cfg: dict) -> dict:
-        token = cfg.get("token") or ""
-        if not token:
-            return {}
-        if cfg.get("type") == "elastic":
-            return {"Authorization": f"ApiKey {token}"}
-        return {"Authorization": f"Bearer {token}"}
 
     def alerts(self, limit: int = 25) -> dict:
         blocked = self._gate()
@@ -87,9 +116,9 @@ class SiemModule(Module):
             return {"available": False, "alerts": [], **blocked}
         cfg = self._config() or {}
         try:
-            r = httpx.get(cfg["url"], headers=self._headers(cfg), timeout=15, verify=cfg.get("verify", True))
+            r = self._fetch(cfg, limit=limit)
             if r.status_code >= 400:
-                return {"available": True, "alerts": [], "error": f"HTTP {r.status_code}"}
+                return {"available": True, "alerts": [], "error": f"HTTP {r.status_code} (auth/URL ?)"}
             data = r.json()
         except Exception as exc:
             return {"available": True, "alerts": [], "error": str(exc)}
