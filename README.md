@@ -41,7 +41,8 @@ Le résultat, c'est **RED SHIELD** : un **bouclier réseau modulaire**, pensé c
 ---
 
 ## 📑 Sommaire
-- [Captures d'écran](#-captures-décran)
+- [Captures d'écran](<img width="1395" height="931" alt="image" src="https://github.com/user-attachments/assets/61ce241c-572e-4da3-a81f-c7b08ccf7f86" />
+)
 - [Fonctionnalités](#-fonctionnalités)
   - [Vue d'ensemble & bouclier](#️-vue-densemble--bouclier-blue-team)
   - [Reconnaissance & offensif](#-reconnaissance--offensif-red-team)
