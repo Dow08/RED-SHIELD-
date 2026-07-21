@@ -27,6 +27,8 @@ collectées par les autres modules → fonctionne aussi en mode air-gapped.
 from __future__ import annotations
 
 import json
+import os
+import sys
 from pathlib import Path
 
 from app.core.bus import EventBus
@@ -332,6 +334,15 @@ def _summary(controls: list[dict]) -> dict:
 
 # ── Persistance locale des évaluations manuelles ──────────────────────────
 def _store_path() -> Path:
+    """Emplacement du fichier d'état, robuste au packaging PyInstaller.
+
+    En bundle « frozen », `__file__` pointe vers un dossier temporaire non
+    persistant → on écrit dans %LOCALAPPDATA%\\RED-SHIELD (ou ~/.red-shield).
+    En développement, on reste dans engine/data.
+    """
+    if getattr(sys, "frozen", False):
+        base = os.getenv("LOCALAPPDATA") or os.path.expanduser("~")
+        return Path(base) / "RED-SHIELD" / "grc_state.json"
     return Path(__file__).resolve().parents[2] / "data" / "grc_state.json"
 
 

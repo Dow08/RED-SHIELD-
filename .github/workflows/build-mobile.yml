@@ -1,0 +1,70 @@
+name: Build mobile (Android APK)
+
+# Compile un APK Android de RED SHIELD sur un runner GitHub.
+# Le mobile embarque le MOTEUR AUTONOME côté client (ui/src/mobile/offline.ts) :
+# analyse d'e-mails (.eml : SPF/DKIM/DMARC, liens, pièces jointes), identification et
+# cassage de hash (md5/sha1/sha256/sha512 via Web Crypto) — 100 % hors-ligne, sans
+# le moteur Python (celui-ci reste réservé au desktop, monitoring système oblige).
+# Le SDK Android n'est pas disponible en local → build délégué à la CI.
+# Lancement manuel depuis l'onglet Actions.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Récupération du code
+        uses: actions/checkout@v4
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Java (JDK 17, requis par Gradle/Android)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: SDK Android
+        uses: android-actions/setup-android@v3
+
+      - name: NDK Android (requis par Tauri mobile)
+        run: |
+          sdkmanager "ndk;26.1.10909125"
+          echo "NDK_HOME=$ANDROID_SDK_ROOT/ndk/26.1.10909125" >> $GITHUB_ENV
+
+      - name: Rust + cibles Android
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+
+      - name: Cache cargo
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ui/src-tauri
+
+      - name: Dépendances frontend
+        working-directory: ui
+        run: npm ci
+
+      - name: Initialisation du projet Android Tauri
+        working-directory: ui
+        run: npx tauri android init --ci
+
+      - name: Build APK (debug, non signé)
+        working-directory: ui
+        run: npx tauri android build --apk --debug
+
+      - name: Publication de l'APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: RED-SHIELD-android-apk
+          path: ui/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          if-no-files-found: error
