@@ -101,6 +101,11 @@ class TraceModule(Module):
     def geo_available(self) -> bool:
         return self._geo is not None
 
+    def geo_lookup_fn(self):
+        """Accès public à la fonction de géoloc hors-ligne (ou None) — évite aux
+        consommateurs (main.py) de toucher aux attributs privés du module."""
+        return self._geo_lookup if self.geo_available else None
+
     # -- détection VPN via les adaptateurs réseau -------------------------
     def detect_vpn(self) -> tuple[bool, str | None]:
         try:

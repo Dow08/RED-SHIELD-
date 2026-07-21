@@ -221,6 +221,19 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=503, detail=f"module '{name}' indisponible")
         return module
 
+    def _audit(action: str, detail: str, when: bool = True) -> None:
+        """Trace une action système dans la piste d'audit (best-effort, jamais bloquant)."""
+        if not when:
+            return
+        persist = registry.get("persistence")
+        if persist is not None and persist.health() == ModuleStatus.ACTIVE:
+            persist.add_audit(action, detail)
+
+    def _geo():
+        """Fonction de géoloc hors-ligne du module trace (ou None)."""
+        trace_mod = registry.get("trace")
+        return trace_mod.geo_lookup_fn() if trace_mod is not None else None
+
     @app.get("/shield/connections")
     def shield_connections() -> list:
         conns = _require("shield").get_connections()
@@ -241,7 +254,7 @@ def create_app() -> FastAPI:
     def shield_geo():
         from app.modules.shield import GeoPoint, GeoView
         trace_mod = registry.get("trace")
-        geo = trace_mod._geo_lookup if (trace_mod is not None and getattr(trace_mod, "geo_available", False)) else None
+        geo = _geo()
         shield = _require("shield")
         scoring = registry.get("scoring")
         conns = shield.get_connections()
@@ -264,11 +277,7 @@ def create_app() -> FastAPI:
     @app.get("/shield/metrics")
     def shield_metrics():
         # Géolocalisation des pays via la base hors-ligne du module trace (si dispo).
-        trace_mod = registry.get("trace")
-        geo = None
-        if trace_mod is not None and getattr(trace_mod, "geo_available", False):
-            geo = trace_mod._geo_lookup
-        return _require("shield").metrics(geo=geo)
+        return _require("shield").metrics(geo=_geo())
 
     @app.get("/bandwidth")
     def bandwidth():
@@ -346,9 +355,7 @@ def create_app() -> FastAPI:
         if module is None:
             raise HTTPException(status_code=503, detail="module scan indisponible")
         result = module.run_async(req.target, req.mode)
-        persist = registry.get("persistence")
-        if persist is not None and persist.health() == ModuleStatus.ACTIVE and result.get("ok"):
-            persist.add_audit("scan", f"{req.target} ({req.mode})")
+        _audit("scan", f"{req.target} ({req.mode})", when=bool(result.get("ok")))
         return result
 
     @app.get("/procvuln")
@@ -459,9 +466,7 @@ def create_app() -> FastAPI:
         if module is None:
             raise HTTPException(status_code=503, detail="module health indisponible")
         result = module.clean(req.category, dry_run=req.dry_run)
-        persist = registry.get("persistence")
-        if persist is not None and persist.health() == ModuleStatus.ACTIVE and not req.dry_run:
-            persist.add_audit("health_clean", f"{req.category}: {result.deleted_files} fichiers, {result.freed_mb} Mo")
+        _audit("health_clean", f"{req.category}: {result.deleted_files} fichiers, {result.freed_mb} Mo", when=not req.dry_run)
         return result
 
     @app.post("/health/startup")
@@ -470,9 +475,7 @@ def create_app() -> FastAPI:
         if module is None:
             raise HTTPException(status_code=503, detail="module health indisponible")
         result = module.set_startup(req.name, req.enabled)
-        persist = registry.get("persistence")
-        if persist is not None and persist.health() == ModuleStatus.ACTIVE and result.get("ok"):
-            persist.add_audit("health_startup", f"{req.name} enabled={req.enabled}")
+        _audit("health_startup", f"{req.name} enabled={req.enabled}", when=bool(result.get("ok")))
         return result
 
     @app.post("/health/restore-point")
@@ -481,9 +484,7 @@ def create_app() -> FastAPI:
         if module is None:
             raise HTTPException(status_code=503, detail="module health indisponible")
         result = module.create_restore_point()
-        persist = registry.get("persistence")
-        if persist is not None and persist.health() == ModuleStatus.ACTIVE and result.get("ok"):
-            persist.add_audit("restore_point", "créé")
+        _audit("restore_point", "créé", when=bool(result.get("ok")))
         return result
 
     @app.get("/updater/list")
@@ -502,9 +503,7 @@ def create_app() -> FastAPI:
         if module is None:
             raise HTTPException(status_code=503, detail="module updater indisponible")
         result = module.upgrade(req.id, dry_run=req.dry_run)
-        persist = registry.get("persistence")
-        if persist is not None and persist.health() == ModuleStatus.ACTIVE and not req.dry_run:
-            persist.add_audit("app_upgrade", req.id)
+        _audit("app_upgrade", req.id, when=not req.dry_run)
         return result
 
     @app.get("/lan/devices")
@@ -559,9 +558,7 @@ def create_app() -> FastAPI:
             result = _require("grc").set_control(req.id, req.status, req.note)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
-        persist = registry.get("persistence")
-        if persist is not None and persist.health() == ModuleStatus.ACTIVE:
-            persist.add_audit("grc_control", f"{req.id}={req.status}")
+        _audit("grc_control", f"{req.id}={req.status}")
         return result
 
     @app.get("/grc/export", response_class=PlainTextResponse)
