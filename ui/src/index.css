@@ -85,17 +85,20 @@ a:hover { text-decoration: underline; }
 .navb .mini { font-size: 9.5px; color: var(--faint); margin-left: 5px; }
 
 /* --- cards & bento --- */
-.grid { display: grid; grid-template-columns: 1fr 340px; gap: 12px; }
-@media (max-width: 940px) { .grid { grid-template-columns: 1fr; } }
-.col { display: flex; flex-direction: column; gap: 12px; }
+/* Colonne principale extensible (minmax 0 évite le débordement) + rail droit rétractable.
+   Passage en 1 colonne assez tôt pour que le rail ne soit jamais comprimé (plus de superposition). */
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 340px); gap: 12px; align-items: start; }
+@media (max-width: 1100px) { .grid { grid-template-columns: 1fr; } }
+.col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 /* Masonry : cartes réparties en colonnes équilibrées (évite les colonnes déséquilibrées) */
 .masonry { column-count: 2; column-gap: 12px; }
 .masonry > * { break-inside: avoid; margin-bottom: 12px; display: block; }
 @media (max-width: 960px) { .masonry { column-count: 1; } }
-.bento { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
-.span2 { grid-column: span 2; } .span4 { grid-column: span 4; } .row2 { grid-row: span 2; }
-@media (max-width: 860px) { .bento { grid-template-columns: repeat(2, 1fr); } .span4 { grid-column: span 2; } }
-@media (max-width: 520px) { .bento { grid-template-columns: 1fr; } .span2, .span4 { grid-column: span 1; } }
+/* Bento auto-ajustable : les cartes se réagencent selon la largeur, jamais de chevauchement.
+   grid-auto-flow dense comble les trous → plus de « vide à gauche ». */
+.bento { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; grid-auto-flow: row dense; }
+.span2 { grid-column: span 2; } .span4 { grid-column: span 2; } .row2 { grid-row: auto; }
+@media (max-width: 560px) { .bento { grid-template-columns: 1fr; } .span2, .span4 { grid-column: auto; } }
 
 .card { position: relative; background: var(--card); border: 1px solid var(--card-b); border-radius: var(--radius);
   box-shadow: var(--shadow); overflow: hidden; backdrop-filter: blur(var(--blur)); -webkit-backdrop-filter: blur(var(--blur)); }
@@ -103,6 +106,11 @@ a:hover { text-decoration: underline; }
 .card::before { top: 7px; left: 7px; border-top: 1.5px solid; border-left: 1.5px solid; }
 .card::after { bottom: 7px; right: 7px; border-bottom: 1.5px solid; border-right: 1.5px solid; }
 .card.collapsed > :not(.card-h) { display: none !important; }
+/* Carte redimensionnable : poignée native en bas à droite sur le corps (modularité sans dépendance). */
+.card.resizable:not(.collapsed) > :not(.card-h):last-child { resize: vertical; overflow: auto; min-height: 120px; }
+/* Garde-fou responsive : aucun média (canvas/svg/table) ne dépasse sa carte. */
+.card :is(canvas, svg, img) { max-width: 100%; }
+.card :is(table, pre) { max-width: 100%; overflow-x: auto; display: block; }
 .card-h { display: flex; align-items: center; gap: 10px; padding: 11px 14px; border-bottom: 1px solid var(--card-b); }
 .card-h h2 { margin: 0; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); font-family: var(--mono); font-weight: 600; }
 .card-h .r { margin-left: auto; font-size: 10.5px; color: var(--faint); font-family: var(--mono); }

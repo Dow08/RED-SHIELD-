@@ -14,14 +14,22 @@ const bandColor = (band: string) => (band === "critique" ? "var(--crit)" : band 
 const bandLabel = (band: string) => (band === "critique" ? "Exposition critique" : band === "elevee" ? "Exposition élevée" : "Exposition faible");
 const fr = (n: number) => n.toFixed(1).replace(".", ",");
 
-function Card({ title, right, children, className }: { title: string; right?: React.ReactNode; children: React.ReactNode; className?: string }) {
-  const [collapsed, setCollapsed] = useState(false);
+function Card({ title, right, children, className, resizable }: { title: string; right?: React.ReactNode; children: React.ReactNode; className?: string; resizable?: boolean }) {
+  const storeKey = "rs.card." + title;
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return localStorage.getItem(storeKey) === "1"; } catch { return false; }
+  });
+  const toggle = () => setCollapsed((c) => {
+    const n = !c;
+    try { localStorage.setItem(storeKey, n ? "1" : "0"); } catch { /* ignore */ }
+    return n;
+  });
   return (
-    <div className={`card ${collapsed ? "collapsed " : ""}${className || ""}`}>
+    <div className={`card ${collapsed ? "collapsed " : ""}${resizable ? "resizable " : ""}${className || ""}`}>
       <div className="card-h">
         <h2>{title}</h2>
         {right && <span className="r">{right}</span>}
-        <button className="chev" aria-label="Réduire / agrandir" onClick={() => setCollapsed((c) => !c)}>
+        <button className="chev" aria-label="Réduire / agrandir" onClick={toggle}>
           {collapsed ? "▸" : "▾"}
         </button>
       </div>
@@ -470,7 +478,7 @@ function CarteReseau({ conns, listeners, trace, traceLabel, geoPoints, onRun, on
   };
   return (
     <>
-      <Card title="Carte réseau" right={<span className="seg">{Object.keys(labels).map((v) => <button key={v} className={view === v ? "on" : ""} onClick={() => setView(v)}>{labels[v]}{v === "entrant" && inboundCount > 0 ? ` (${inboundCount})` : ""}</button>)}</span>}>
+      <Card title="Carte réseau" resizable right={<span className="seg">{Object.keys(labels).map((v) => <button key={v} className={view === v ? "on" : ""} onClick={() => setView(v)}>{labels[v]}{v === "entrant" && inboundCount > 0 ? ` (${inboundCount})` : ""}</button>)}</span>}>
         <div className="stage"><NetworkGraph conns={conns} view={view} onSelect={onSelect} trace={trace} /></div>
         <div className="disc" style={{ paddingBottom: 0 }}>{viewHint[view]}</div>
         <div className="legend">
@@ -508,7 +516,7 @@ function CarteReseau({ conns, listeners, trace, traceLabel, geoPoints, onRun, on
         )}
       </Card>
       <div style={{ height: 12 }} />
-      <Card title="Tracé de connexion — carte du monde" right={<><div className="search" style={{ marginRight: 8 }}><input value={target} onChange={(e) => setTarget(e.target.value)} style={{ width: 120 }} /></div><button className="btn ghost" onClick={() => onRun(target)}>Lancer le tracé</button></>}>
+      <Card title="Tracé de connexion — carte du monde" resizable right={<><div className="search" style={{ marginRight: 8 }}><input value={target} onChange={(e) => setTarget(e.target.value)} style={{ width: 120 }} /></div><button className="btn ghost" onClick={() => onRun(target)}>Lancer le tracé</button></>}>
         <div className="stage"><TraceMap trace={trace} destLabel={traceLabel} points={geoPoints?.points} home={geoPoints?.home ?? null} onSelect={onSelect} /></div>
         <div className="legend" style={{ paddingBottom: 0 }}>
           <span><span className="d" style={{ background: "var(--accent)" }}></span>Ta sortie réseau (box)</span>
@@ -1165,6 +1173,23 @@ function Connecteurs({ airgapped, connectors, onRefresh }: { airgapped: boolean;
 
 /* ============ DIAGNOSTIC ============ */
 const KIND_ICON: Record<string, string> = { nouvelle_connexion: "➕", connexion_fermee: "➖", alerte: "🚨" };
+const sevClass = (s: string) => (s === "crit" || s === "suspect" ? "error" : s === "watch" ? "warn" : "info");
+function frDay(ts: string): string {
+  const d = new Date(ts);
+  if (isNaN(d.getTime())) return "Date inconnue";
+  const s = d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+function groupTimelineByDay(events: TimelineEvent[]): { key: string; label: string; events: TimelineEvent[] }[] {
+  const map = new Map<string, TimelineEvent[]>();
+  for (const e of events) {
+    const key = (e.ts || "").slice(0, 10) || "?";
+    (map.get(key) || map.set(key, []).get(key)!).push(e);
+  }
+  return [...map.entries()]
+    .sort((a, b) => b[0].localeCompare(a[0]))
+    .map(([k, v]) => ({ key: k, label: k === "?" ? "Date inconnue" : frDay(v[0].ts), events: v }));
+}
 function Diagnostic({ logs, history, timeline, beaconing, config }: { logs: any[]; history: any[]; timeline: TimelineEvent[]; beaconing: Beacon[]; config?: { purge_on_exit: boolean; storage_budget_go: number; sample_interval: number } }) {
   const [level, setLevel] = useState("");
   const shown = level ? logs.filter((l) => l.level === level) : logs;
@@ -1185,11 +1210,24 @@ function Diagnostic({ logs, history, timeline, beaconing, config }: { logs: any[
           {shown.length > 0 && <AiAnalyzeButton kind="journal d'événements/erreurs" label="🤖 Analyser les logs avec l'IA" getText={() => shown.slice(-40).map((l) => `${l.ts.slice(11, 19)} [${l.level}] ${l.module}: ${l.message}`).join("\n")} />}
         </Card>
         <Card title="Timeline des événements" right={`${(timeline || []).length}`}>
-          {(timeline || []).slice(0, 40).map((e, i) => (
-            <div className="log" key={i}>
-              <span className="ts">{e.ts.slice(11, 19)}</span>
-              <span className={`lv ${e.severity === "crit" || e.severity === "suspect" ? "error" : e.severity === "watch" ? "warn" : "info"}`}>{KIND_ICON[e.kind] || "•"}</span>
-              <span className="ms">{e.process} → {e.remote} <span className="muted">({e.kind.replace("_", " ")})</span></span>
+          <div className="note">Événements réseau notables <b>regroupés par jour</b> pour une lecture rapide. Le <b>résumé IA</b> synthétise la période en langage clair (nécessite un connecteur LLM + air-gapped désactivé).</div>
+          {(timeline || []).length > 0 && (
+            <AiAnalyzeButton
+              kind="timeline d'événements réseau (analyse de sécurité)"
+              label="🤖 Résumer la période avec l'IA"
+              getText={() => (timeline || []).slice(0, 60).map((e) => `${e.ts.slice(0, 19).replace("T", " ")} [${e.severity}] ${e.kind}: ${e.process} → ${e.remote}`).join("\n")}
+            />
+          )}
+          {groupTimelineByDay(timeline || []).map((grp) => (
+            <div key={grp.key}>
+              <div className="grc-dom">{grp.label} · {grp.events.length} événement{grp.events.length > 1 ? "s" : ""}</div>
+              {grp.events.slice(0, 30).map((e, i) => (
+                <div className="log" key={i}>
+                  <span className="ts">{e.ts.slice(11, 19)}</span>
+                  <span className={`lv ${sevClass(e.severity)}`}>{KIND_ICON[e.kind] || "•"}</span>
+                  <span className="ms">{e.process} → {e.remote} <span className="muted">({e.kind.replace(/_/g, " ")})</span></span>
+                </div>
+              ))}
             </div>
           ))}
           {(!timeline || timeline.length === 0) && <div className="empty">Aucun événement encore (échantillonnage en cours).</div>}
