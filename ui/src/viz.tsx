@@ -358,11 +358,12 @@ const CONTS: [number, number, number, number][] = [
   [-100, 48, 30, 20], [-95, 63, 44, 10], [-88, 13, 10, 9], [-60, -18, 17, 28],
   [12, 52, 24, 12], [20, 2, 23, 33], [92, 52, 52, 23], [78, 22, 12, 14], [112, 8, 16, 12], [134, -25, 15, 11],
 ];
-export function TraceMap({ trace, destLabel, points, onSelect }: { trace: TraceResult | null; destLabel?: string; points?: import("./api").GeoPoint[]; onSelect?: (ip: string) => void }) {
+export function TraceMap({ trace, destLabel, points, home, onSelect }: { trace: TraceResult | null; destLabel?: string; points?: import("./api").GeoPoint[]; home?: import("./api").GeoPoint | null; onSelect?: (ip: string) => void }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const dataRef = useRef<TraceResult | null>(trace);
   const destRef = useRef<string | undefined>(destLabel);
   const pointsRef = useRef<import("./api").GeoPoint[]>(points || []);
+  const homeRef = useRef<import("./api").GeoPoint | null>(home ?? null);
   const mouse = useRef<{ x: number; y: number; on: boolean }>({ x: 0, y: 0, on: false });
   const hits = useRef<{ x: number; y: number; g: import("./api").GeoPoint }[]>([]);
   const onSelectRef = useRef(onSelect);
@@ -370,6 +371,7 @@ export function TraceMap({ trace, destLabel, points, onSelect }: { trace: TraceR
   useEffect(() => { dataRef.current = trace; }, [trace]);
   useEffect(() => { destRef.current = destLabel; }, [destLabel]);
   useEffect(() => { pointsRef.current = points || []; }, [points]);
+  useEffect(() => { homeRef.current = home ?? null; }, [home]);
   useEffect(() => {
     const cv = ref.current!;
     const ctx = cv.getContext("2d")!;
@@ -424,6 +426,30 @@ export function TraceMap({ trace, destLabel, points, onSelect }: { trace: TraceR
       // Connexions réelles géolocalisées (points colorés par sévérité) sous le tracé.
       const gpts = pointsRef.current || [];
       const scol = (s: string) => (s === "crit" || s === "suspect" ? cm.crit : s === "watch" ? cm.watch : cm.safe);
+      const homeG = homeRef.current;
+      let homeXY: [number, number] | null = null;
+      if (homeG) { const [hx, hy] = proj(homeG.lon, homeG.lat); homeXY = T(hx, hy); }
+      // Flux : traits animés depuis « chez toi » (box) vers chaque connexion — sens entrant/sortant.
+      if (homeXY) {
+        gpts.forEach((g, i) => {
+          const [x, y] = proj(g.lon, g.lat); const [px, py] = T(x, y);
+          const entrant = g.direction === "entrant";
+          const c = entrant ? cm.watch : cm.gold;
+          const [hx, hy] = homeXY!;
+          const cx = (hx + px) / 2, cy = (hy + py) / 2 - Math.hypot(px - hx, py - hy) * 0.18; // courbe
+          ctx.strokeStyle = c; ctx.globalAlpha = 0.12; ctx.lineWidth = 1;
+          ctx.beginPath();
+          for (let f = 0; f <= 1; f += 0.05) { const u = 1 - f; const bx = u * u * hx + 2 * u * f * cx + f * f * px, by = u * u * hy + 2 * u * f * cy + f * f * py; f ? ctx.lineTo(bx, by) : ctx.moveTo(bx, by); }
+          ctx.stroke(); ctx.globalAlpha = 1;
+          // particule animée dans le sens du flux
+          if (!reduce) {
+            let ph = (t * 0.35 + i * 0.13) % 1;
+            if (entrant) ph = 1 - ph;                       // entrant : de la connexion vers chez toi
+            const u = 1 - ph; const bx = u * u * hx + 2 * u * ph * cx + ph * ph * px, by = u * u * hy + 2 * u * ph * cy + ph * ph * py;
+            ctx.beginPath(); ctx.fillStyle = c; ctx.globalAlpha = 0.9; ctx.arc(bx, by, entrant ? 2 : 1.7, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
+          }
+        });
+      }
       hits.current = [];
       let ghover: { x: number; y: number; g: import("./api").GeoPoint } | null = null;
       gpts.forEach((g) => {
@@ -437,6 +463,16 @@ export function TraceMap({ trace, destLabel, points, onSelect }: { trace: TraceR
         ctx.beginPath(); ctx.fillStyle = hov ? cm.ink : c; ctx.arc(px, py, crit ? 2.2 : 1.6, 0, 7); ctx.fill();
       });
       cv.style.cursor = ghover ? "pointer" : "grab";
+      // Marqueur « chez toi » (sortie réseau / box), au-dessus des flux.
+      if (homeXY) {
+        const acc = cvar("--accent", "#2fe0d0");
+        const [hx, hy] = homeXY;
+        ctx.beginPath(); ctx.fillStyle = acc; ctx.globalAlpha = 0.14 + 0.08 * Math.sin(t * 2.5); ctx.arc(hx, hy, 11, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
+        ctx.beginPath(); ctx.strokeStyle = acc; ctx.lineWidth = 2; ctx.arc(hx, hy, 5.5, 0, 7); ctx.stroke();
+        ctx.beginPath(); ctx.fillStyle = acc; ctx.arc(hx, hy, 2.6, 0, 7); ctx.fill();
+        ctx.fillStyle = acc; ctx.font = "700 10px Consolas, monospace"; ctx.textAlign = "left";
+        ctx.fillText("Ma sortie réseau", hx + 9, hy + 3);
+      }
       const tr = dataRef.current;
       const geoHops = (tr?.hops || []).filter((h) => h.lat != null && h.lon != null);
       const pts = geoHops.map((h) => { const [x, y] = proj(h.lon!, h.lat!); const [px, py] = T(x, y); return { px, py, h }; });

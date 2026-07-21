@@ -456,7 +456,7 @@ function Bouclier({ conns, active, setActive }: { conns: ScoredConnection[]; act
 }
 
 /* ============ CARTE RÉSEAU ============ */
-function CarteReseau({ conns, listeners, trace, traceLabel, geoPoints, onRun, onSelect }: { conns: ScoredConnection[]; listeners: import("./api").Listener[]; trace: TraceResult | null; traceLabel: string; geoPoints: import("./api").GeoPoint[]; onRun: (t: string) => void; onSelect: (ip: string) => void }) {
+function CarteReseau({ conns, listeners, trace, traceLabel, geoPoints, onRun, onSelect }: { conns: ScoredConnection[]; listeners: import("./api").Listener[]; trace: TraceResult | null; traceLabel: string; geoPoints: import("./api").GeoView | null; onRun: (t: string) => void; onSelect: (ip: string) => void }) {
   const [view, setView] = useState("sortant");
   const [target, setTarget] = useState("1.1.1.1");
   const labels: Record<string, string> = { sortant: "Sortant", entrant: "Entrant", local: "Local (LAN)", tous: "Tous" };
@@ -509,12 +509,13 @@ function CarteReseau({ conns, listeners, trace, traceLabel, geoPoints, onRun, on
       </Card>
       <div style={{ height: 12 }} />
       <Card title="Tracé de connexion — carte du monde" right={<><div className="search" style={{ marginRight: 8 }}><input value={target} onChange={(e) => setTarget(e.target.value)} style={{ width: 120 }} /></div><button className="btn ghost" onClick={() => onRun(target)}>Lancer le tracé</button></>}>
-        <div className="stage"><TraceMap trace={trace} destLabel={traceLabel} points={geoPoints} onSelect={onSelect} /></div>
+        <div className="stage"><TraceMap trace={trace} destLabel={traceLabel} points={geoPoints?.points} home={geoPoints?.home ?? null} onSelect={onSelect} /></div>
         <div className="legend" style={{ paddingBottom: 0 }}>
-          <span><span className="d" style={{ background: "var(--safe)" }}></span>Connexion saine</span>
-          <span><span className="d" style={{ background: "var(--watch)" }}></span>À surveiller</span>
-          <span><span className="d" style={{ background: "var(--crit)" }}></span>Suspecte / critique</span>
-          <span style={{ color: "var(--faint)" }}>· {geoPoints.length} connexion(s) géolocalisée(s) · <b style={{ color: "var(--accent)" }}>survole un point</b> (IP/DNS/pays) ou <b style={{ color: "var(--accent)" }}>clique</b> pour le tracer</span>
+          <span><span className="d" style={{ background: "var(--accent)" }}></span>Ta sortie réseau (box)</span>
+          <span><span className="d" style={{ background: "var(--accent2)" }}></span>Flux sortant</span>
+          <span><span className="d" style={{ background: "var(--watch)" }}></span>Flux entrant</span>
+          <span><span className="d" style={{ background: "var(--crit)" }}></span>Suspect / critique</span>
+          <span style={{ color: "var(--faint)" }}>· {geoPoints?.points.length ?? 0} connexion(s) · <b style={{ color: "var(--accent)" }}>survole</b> (IP/DNS/pays) ou <b style={{ color: "var(--accent)" }}>clique</b> un point</span>
         </div>
         <div className="disc">
           Molette = zoom · glisser = déplacer.{" "}
@@ -1327,7 +1328,7 @@ export default function App() {
 
       {tab === "dashboard" && <Dashboard conns={conns} exposure={exposure.data} metrics={metrics.data} modules={mods} logs={logs.data || []} bwHist={bwHist} bw={bandwidth.data} scoreHist={scoreHist} top={top.data || []} thrStatus={thrStatus.data} thrProcs={thrProcs.data || []} trace={trace.data} beaconing={beaconing.data || []} sevFilter={sevFilter} onGo={setTab} onSelect={selectEndpoint} />}
       {tab === "bouclier" && <Bouclier conns={conns} active={sevFilter} setActive={setSevFilter} />}
-      {tab === "carte" && <CarteReseau conns={conns} listeners={listeners.data || []} trace={trace.data} traceLabel={traceLabel} geoPoints={geoPoints.data || []} onRun={runTrace} onSelect={selectEndpoint} />}
+      {tab === "carte" && <CarteReseau conns={conns} listeners={listeners.data || []} trace={trace.data} traceLabel={traceLabel} geoPoints={geoPoints.data || null} onRun={runTrace} onSelect={selectEndpoint} />}
       {tab === "remediation" && <Remediation conns={conns} metrics={metrics.data} listeners={listeners.data || []} />}
       {tab === "recon" && <Recon lan={lan.data} scan={scan.data} procvuln={procvuln.data} onScan={(t, m) => api.scanRun(t, m)} />}
       {tab === "offensif" && <Offensif airgapped={airgapped} wifi={wifi.data} />}

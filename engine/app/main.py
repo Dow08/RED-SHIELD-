@@ -198,13 +198,27 @@ def create_app() -> FastAPI:
 
     @app.get("/shield/geo")
     def shield_geo():
+        from app.modules.shield import GeoPoint, GeoView
         trace_mod = registry.get("trace")
         geo = trace_mod._geo_lookup if (trace_mod is not None and getattr(trace_mod, "geo_available", False)) else None
         shield = _require("shield")
         scoring = registry.get("scoring")
         conns = shield.get_connections()
         scored = scoring.score_connections(conns) if (scoring is not None and scoring.health() == ModuleStatus.ACTIVE) else conns
-        return shield.geo_points(scored, geo)
+        # Point « chez toi » = géoloc de l'IP publique de sortie (depuis le traceroute par défaut).
+        home = None
+        if geo is not None and trace_mod is not None:
+            try:
+                tr = trace_mod.get()
+                if tr.public_ip:
+                    g = geo(tr.public_ip)
+                    if g and g.get("lat") is not None:
+                        home = GeoPoint(ip=tr.public_ip, dns="", lat=g["lat"], lon=g["lon"],
+                                        country=g.get("country") or "", city=g.get("city") or "",
+                                        process="Ma sortie réseau", severity="safe")
+            except Exception:
+                home = None
+        return GeoView(home=home, points=shield.geo_points(scored, geo))
 
     @app.get("/shield/metrics")
     def shield_metrics():
