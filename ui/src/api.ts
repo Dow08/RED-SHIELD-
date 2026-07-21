@@ -52,7 +52,7 @@ export interface ModuleInfo { name: string; version: string; description: string
 export interface TopTalker { pid: number; process: string; connections: number; }
 export interface LogEntry { ts: string; level: string; module: string; message: string; }
 export interface Hop { hop: number; ip: string; dns: string | null; city: string | null; country: string | null; lat: number | null; lon: number | null; private: boolean; }
-export interface GeoPoint { ip: string; lat: number; lon: number; country: string; city: string; process: string; count: number; severity: Severity; }
+export interface GeoPoint { ip: string; dns: string; lat: number; lon: number; country: string; city: string; process: string; count: number; severity: Severity; }
 export interface TraceResult { target: string; hops: Hop[]; public_ip: string | null; vpn_active: boolean; vpn_adapter: string | null; geo_available: boolean; running: boolean; error: string | null; }
 export interface WifiNet { ssid: string; auth: string; encryption: string; channel: string; bssid: string; signal: number; risk: string; reason: string; }
 export interface CrackResult { found: string | null; tried: number; algo: string; error: string | null; }

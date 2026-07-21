@@ -358,11 +358,15 @@ const CONTS: [number, number, number, number][] = [
   [-100, 48, 30, 20], [-95, 63, 44, 10], [-88, 13, 10, 9], [-60, -18, 17, 28],
   [12, 52, 24, 12], [20, 2, 23, 33], [92, 52, 52, 23], [78, 22, 12, 14], [112, 8, 16, 12], [134, -25, 15, 11],
 ];
-export function TraceMap({ trace, destLabel, points }: { trace: TraceResult | null; destLabel?: string; points?: import("./api").GeoPoint[] }) {
+export function TraceMap({ trace, destLabel, points, onSelect }: { trace: TraceResult | null; destLabel?: string; points?: import("./api").GeoPoint[]; onSelect?: (ip: string) => void }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const dataRef = useRef<TraceResult | null>(trace);
   const destRef = useRef<string | undefined>(destLabel);
   const pointsRef = useRef<import("./api").GeoPoint[]>(points || []);
+  const mouse = useRef<{ x: number; y: number; on: boolean }>({ x: 0, y: 0, on: false });
+  const hits = useRef<{ x: number; y: number; g: import("./api").GeoPoint }[]>([]);
+  const onSelectRef = useRef(onSelect);
+  onSelectRef.current = onSelect;
   useEffect(() => { dataRef.current = trace; }, [trace]);
   useEffect(() => { destRef.current = destLabel; }, [destLabel]);
   useEffect(() => { pointsRef.current = points || []; }, [points]);
@@ -374,6 +378,21 @@ export function TraceMap({ trace, destLabel, points }: { trace: TraceResult | nu
     const ro = new ResizeObserver(() => fitCanvas(cv, ctx, W, H));
     ro.observe(cv); fitCanvas(cv, ctx, W, H);
     const detach = attachPanZoom(cv, vw, W, H);
+    const toLocal = (e: PointerEvent) => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) * (W / r.width), (e.clientY - r.top) * (H / r.height)] as [number, number]; };
+    const onMove = (e: PointerEvent) => { const [x, y] = toLocal(e); mouse.current = { x, y, on: true }; };
+    const onLeave = () => { mouse.current.on = false; };
+    let downX = 0, downY = 0;
+    const onDown = (e: PointerEvent) => { downX = e.clientX; downY = e.clientY; };
+    const onUp = (e: PointerEvent) => {
+      if (Math.hypot(e.clientX - downX, e.clientY - downY) > 5) return; // c'était un glisser
+      const [mx, my] = toLocal(e);
+      const hit = hits.current.find((h) => Math.hypot(mx - h.x, my - h.y) < 9);
+      if (hit) onSelectRef.current?.(hit.g.ip);
+    };
+    cv.addEventListener("pointermove", onMove);
+    cv.addEventListener("pointerleave", onLeave);
+    cv.addEventListener("pointerdown", onDown);
+    cv.addEventListener("pointerup", onUp);
     const proj = (lon: number, lat: number): [number, number] => [((lon + 180) / 360) * W, ((90 - lat) / 180) * H];
     const inLand = (lon: number, lat: number) => CONTS.some(([cx, cy, rx, ry]) => ((lon - cx) / rx) ** 2 + ((lat - cy) / ry) ** 2 <= 1);
     const T = (x: number, y: number): [number, number] => [x * vw.s + vw.ox, y * vw.s + vw.oy];
@@ -405,13 +424,19 @@ export function TraceMap({ trace, destLabel, points }: { trace: TraceResult | nu
       // Connexions réelles géolocalisées (points colorés par sévérité) sous le tracé.
       const gpts = pointsRef.current || [];
       const scol = (s: string) => (s === "crit" || s === "suspect" ? cm.crit : s === "watch" ? cm.watch : cm.safe);
+      hits.current = [];
+      let ghover: { x: number; y: number; g: import("./api").GeoPoint } | null = null;
       gpts.forEach((g) => {
         const [x, y] = proj(g.lon, g.lat); const [px, py] = T(x, y);
+        hits.current.push({ x: px, y: py, g });
         const c = scol(g.severity); const crit = g.severity === "crit" || g.severity === "suspect";
+        const hov = mouse.current.on && Math.hypot(mouse.current.x - px, mouse.current.y - py) < 8;
+        if (hov) ghover = { x: px, y: py, g };
         if (crit) { ctx.beginPath(); ctx.fillStyle = c; ctx.globalAlpha = 0.1 + 0.1 * Math.sin(t * 3); ctx.arc(px, py, 9, 0, 7); ctx.fill(); ctx.globalAlpha = 1; }
-        ctx.beginPath(); ctx.fillStyle = c; ctx.globalAlpha = 0.5; ctx.arc(px, py, crit ? 4 : 2.8, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
-        ctx.beginPath(); ctx.fillStyle = c; ctx.arc(px, py, crit ? 2.2 : 1.6, 0, 7); ctx.fill();
+        ctx.beginPath(); ctx.fillStyle = c; ctx.globalAlpha = hov ? 0.85 : 0.5; ctx.arc(px, py, crit ? 4 : hov ? 3.6 : 2.8, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
+        ctx.beginPath(); ctx.fillStyle = hov ? cm.ink : c; ctx.arc(px, py, crit ? 2.2 : 1.6, 0, 7); ctx.fill();
       });
+      cv.style.cursor = ghover ? "pointer" : "grab";
       const tr = dataRef.current;
       const geoHops = (tr?.hops || []).filter((h) => h.lat != null && h.lon != null);
       const pts = geoHops.map((h) => { const [x, y] = proj(h.lon!, h.lat!); const [px, py] = T(x, y); return { px, py, h }; });
@@ -437,6 +462,27 @@ export function TraceMap({ trace, destLabel, points }: { trace: TraceResult | nu
         if (pt.h.city) ctx.fillText(pt.h.city, pt.px + 8, pt.py + 5);
         ctx.fillText(pt.h.ip, pt.px + 8, pt.py + (pt.h.city ? 15 : 5));
       });
+      if (ghover) {
+        const g = (ghover as { x: number; y: number; g: import("./api").GeoPoint }).g;
+        const gx = (ghover as { x: number; y: number }).x, gy = (ghover as { x: number; y: number }).y;
+        const rows = [
+          `${g.ip}${g.count > 1 ? `  (×${g.count})` : ""}`,
+          g.dns ? g.dns : "pas de DNS inverse",
+          [g.city, g.country].filter(Boolean).join(", ") || "localisation inconnue",
+          g.process ? `via ${g.process}` : "",
+        ].filter(Boolean);
+        ctx.font = "11px Consolas, monospace";
+        const w = Math.max(...rows.map((r) => ctx.measureText(r).width)) + 18;
+        const h = rows.length * 15 + 10;
+        const bx = Math.min(gx + 10, W - w - 4), by = Math.max(gy - h - 8, 4);
+        ctx.fillStyle = "#0d1119"; ctx.strokeStyle = scol(g.severity); ctx.lineWidth = 1.5;
+        (ctx as any).roundRect(bx, by, w, h, 6); ctx.fill(); ctx.stroke();
+        rows.forEach((line, i) => {
+          ctx.fillStyle = i === 0 ? cm.ink : cm.faint; ctx.textAlign = "left";
+          ctx.font = i === 0 ? "700 11px Consolas, monospace" : "11px Consolas, monospace";
+          ctx.fillText(line, bx + 9, by + 16 + i * 15);
+        });
+      }
       if (pts.length === 0 && gpts.length === 0) {
         ctx.fillStyle = cm.faint; ctx.font = "12px system-ui"; ctx.textAlign = "center";
         ctx.fillText(tr?.running ? "Traceroute en cours…" : tr?.error ? `Erreur : ${tr.error}` : "Lance un tracé pour voir le chemin", W / 2, H / 2);
@@ -444,7 +490,11 @@ export function TraceMap({ trace, destLabel, points }: { trace: TraceResult | nu
       raf = requestAnimationFrame(draw);
     };
     draw();
-    return () => { cancelAnimationFrame(raf); ro.disconnect(); detach(); };
+    return () => {
+      cancelAnimationFrame(raf); ro.disconnect(); detach();
+      cv.removeEventListener("pointermove", onMove); cv.removeEventListener("pointerleave", onLeave);
+      cv.removeEventListener("pointerdown", onDown); cv.removeEventListener("pointerup", onUp);
+    };
   }, []);
   return <canvas ref={ref} />;
 }

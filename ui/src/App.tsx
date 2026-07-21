@@ -130,7 +130,7 @@ function ConnRow({ c, showCols }: { c: ScoredConnection; showCols: Record<string
         {c.mitre.map((t) => <span key={t.id} className="mtag">MITRE {t.id}</span>)}
         {c.exe && c.exe.toLowerCase().includes("temp") && <div className="path">{c.exe}</div>}
       </td>
-      {showCols.dns && <td>{c.remote_dns ? <span className="muted">{c.remote_dns}</span> : c.dns_resolved ? <span className="nodns">— aucun —</span> : <span className="muted">…</span>}</td>}
+      {showCols.dns && <td>{c.remote_dns ? <span className="muted">{c.remote_dns}</span> : c.dns_resolved ? <span className="muted" style={{ fontStyle: "italic" }} title="Aucun DNS inverse : IP directe (CDN/serveur cloud, fréquent)">serveur distant</span> : <span className="muted">…</span>}</td>}
       <td className="mono muted">{c.remote_addr}</td>
       {showCols.port && <td className="mono">{c.port}</td>}
       {showCols.risk && <td><span className="risk" style={{ color: rc }}>{c.risk}</span></td>}
@@ -509,12 +509,12 @@ function CarteReseau({ conns, listeners, trace, traceLabel, geoPoints, onRun, on
       </Card>
       <div style={{ height: 12 }} />
       <Card title="Tracé de connexion — carte du monde" right={<><div className="search" style={{ marginRight: 8 }}><input value={target} onChange={(e) => setTarget(e.target.value)} style={{ width: 120 }} /></div><button className="btn ghost" onClick={() => onRun(target)}>Lancer le tracé</button></>}>
-        <div className="stage"><TraceMap trace={trace} destLabel={traceLabel} points={geoPoints} /></div>
+        <div className="stage"><TraceMap trace={trace} destLabel={traceLabel} points={geoPoints} onSelect={onSelect} /></div>
         <div className="legend" style={{ paddingBottom: 0 }}>
           <span><span className="d" style={{ background: "var(--safe)" }}></span>Connexion saine</span>
           <span><span className="d" style={{ background: "var(--watch)" }}></span>À surveiller</span>
           <span><span className="d" style={{ background: "var(--crit)" }}></span>Suspecte / critique</span>
-          <span style={{ color: "var(--faint)" }}>· {geoPoints.length} connexion(s) géolocalisée(s) · le tracé actif est en surbrillance</span>
+          <span style={{ color: "var(--faint)" }}>· {geoPoints.length} connexion(s) géolocalisée(s) · <b style={{ color: "var(--accent)" }}>survole un point</b> (IP/DNS/pays) ou <b style={{ color: "var(--accent)" }}>clique</b> pour le tracer</span>
         </div>
         <div className="disc">
           Molette = zoom · glisser = déplacer.{" "}
@@ -1123,8 +1123,7 @@ function Health({ report, updater }: { report: import("./api").HealthReport | nu
   const dc = (p: number) => (p >= 90 ? "var(--crit)" : p >= 75 ? "var(--watch)" : "var(--safe)");
   const restore = async () => { setRestoreMsg("Création du point de restauration…"); try { const x = await api.healthRestorePoint(); setRestoreMsg(x.ok ? "Point de restauration créé ✅" : (x.error || "échec")); } catch { setRestoreMsg("échec"); } };
   return (
-    <div className="grid">
-      <div className="col">
+    <div className="masonry">
         <Card title="Bilan de santé du poste" right={<button className="btn ghost" style={{ padding: "5px 10px" }} onClick={refresh}>Rafraîchir</button>}>
           <div className="note">État <b>réel</b> de la machine (lecture seule) : disques, mémoire, nettoyables, redémarrage en attente. Toutes les valeurs sont mesurées, rien d'inventé.</div>
           {!r || r.running ? <div className="empty">{r?.running ? "Analyse du poste…" : "Chargement…"}</div> : (
@@ -1169,8 +1168,6 @@ function Health({ report, updater }: { report: import("./api").HealthReport | nu
           ))}
           {r && r.cleanables.length === 0 && <div className="empty">Rien à nettoyer.</div>}
         </Card>
-      </div>
-      <div className="col">
         <Card title="Mises à jour des applications" right={<><span style={{ marginRight: 8, color: (upd?.updates.length ?? 0) ? "var(--watch)" : "var(--safe)" }}>{upd?.updates.length ?? 0} dispo</span><button className="btn ghost" style={{ padding: "5px 10px" }} onClick={() => api.updaterRun()}>Vérifier</button></>}>
           <div className="note">Via <b>winget</b> (gestionnaire officiel Microsoft) — sources connues, aucun tiers opaque. Vérifie le versionnage de tes applis et installe la mise à jour (dry-run → confirmation, jamais automatique).</div>
           {!upd ? <div className="empty">Chargement…</div>
@@ -1219,7 +1216,6 @@ function Health({ report, updater }: { report: import("./api").HealthReport | nu
           ))}
           {r && r.top_memory.length === 0 && <div className="empty">—</div>}
         </Card>
-      </div>
     </div>
   );
 }

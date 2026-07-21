@@ -95,6 +95,7 @@ class TopTalker(BaseModel):
 
 class GeoPoint(BaseModel):
     ip: str
+    dns: str = ""
     lat: float
     lon: float
     country: str = ""
@@ -370,16 +371,19 @@ class ShieldModule(Module):
             if not g or g.get("lat") is None or g.get("lon") is None:
                 continue
             sev = getattr(c, "severity", "safe")
+            dns = getattr(c, "remote_dns", "") or ""
             e = agg.get(ip)
             if e is None:
-                agg[ip] = {"ip": ip, "lat": g["lat"], "lon": g["lon"], "country": g.get("country") or "",
+                agg[ip] = {"ip": ip, "dns": dns, "lat": g["lat"], "lon": g["lon"], "country": g.get("country") or "",
                            "city": g.get("city") or "", "process": c.process, "count": 1, "sev": sev}
             else:
                 e["count"] += 1
+                if dns and not e["dns"]:
+                    e["dns"] = dns
                 if _SEV_RANK.get(sev, 0) > _SEV_RANK.get(e["sev"], 0):
                     e["sev"] = sev
                     e["process"] = c.process
-        return [GeoPoint(ip=e["ip"], lat=e["lat"], lon=e["lon"], country=e["country"], city=e["city"],
+        return [GeoPoint(ip=e["ip"], dns=e["dns"], lat=e["lat"], lon=e["lon"], country=e["country"], city=e["city"],
                          process=e["process"], count=e["count"], severity=e["sev"]) for e in agg.values()]
 
     def top_talkers(self) -> list[TopTalker]:

@@ -88,6 +88,10 @@ a:hover { text-decoration: underline; }
 .grid { display: grid; grid-template-columns: 1fr 340px; gap: 12px; }
 @media (max-width: 940px) { .grid { grid-template-columns: 1fr; } }
 .col { display: flex; flex-direction: column; gap: 12px; }
+/* Masonry : cartes réparties en colonnes équilibrées (évite les colonnes déséquilibrées) */
+.masonry { column-count: 2; column-gap: 12px; }
+.masonry > * { break-inside: avoid; margin-bottom: 12px; display: block; }
+@media (max-width: 960px) { .masonry { column-count: 1; } }
 .bento { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
 .span2 { grid-column: span 2; } .span4 { grid-column: span 4; } .row2 { grid-row: span 2; }
 @media (max-width: 860px) { .bento { grid-template-columns: repeat(2, 1fr); } .span4 { grid-column: span 2; } }
