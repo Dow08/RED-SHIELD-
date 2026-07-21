@@ -4,32 +4,54 @@
 
 # RED SHIELD
 
-**Bouclier réseau modulaire *red + blue* — surveillance locale, recon & remédiation.**
+**Mon poste de commandement réseau — *red + blue*, modulaire, 100 % local.**
 
-Observe les connexions de ta machine en temps réel · les note (score 0-100) · les explique (MITRE ATT&CK) · propose des remédiations priorisées — dans un dashboard cyber, 100 % local, extensible par modules.
+Une vision d'ensemble de ma machine en temps réel, et des briques que j'active selon le besoin : surveillance défensive, reconnaissance offensive, SOC, remédiation, conformité et santé du poste — le tout dans un seul dashboard.
 
 [![Licence : PolyForm Noncommercial](https://img.shields.io/badge/licence-PolyForm%20Noncommercial%201.0.0-orange)](LICENSE)
 [![Sécurité : Trivy](https://img.shields.io/badge/s%C3%A9curit%C3%A9-Trivy%20CI-blue)](.github/workflows/trivy.yml)
-![Tests](https://img.shields.io/badge/tests-43%20verts-brightgreen)
+![Tests](https://img.shields.io/badge/tests-82%20pytest%20%2B%207%20vitest-brightgreen)
 ![Backend](https://img.shields.io/badge/backend-Python%203.11%2B%20·%20FastAPI-3776AB)
 ![Frontend](https://img.shields.io/badge/frontend-React%2018%20·%20Vite%20·%20Tailwind-61DAFB)
+![Desktop](https://img.shields.io/badge/desktop-Tauri%20v2-24C8DB)
 ![Air-gapped](https://img.shields.io/badge/air--gapped-par%20défaut-success)
 
 </div>
 
 > [!WARNING]
-> **Usage autorisé uniquement.** RED SHIELD s'utilise sur **ta propre machine** ou sur des cibles pour lesquelles tu détiens une **autorisation écrite** (pentest, lab). Le recon actif (nmap, traceroute) ne doit viser que des cibles autorisées. Un journal d'audit est tenu localement.
+> **Usage autorisé uniquement.** RED SHIELD s'utilise sur **ma/ta propre machine** ou sur des cibles couvertes par une **autorisation écrite** (pentest, lab). Le recon actif (nmap, traceroute) ne vise que des cibles autorisées. Un journal d'audit est tenu localement.
 
 > [!NOTE]
 > **À des fins non commerciales.** RED SHIELD est fourni pour être **téléchargé, testé et étudié**. Sa **vente et toute utilisation commerciale sont interdites** — voir [Licence](#-licence).
 
 ---
 
+## Pourquoi je l'ai construit
+
+J'avais besoin d'un outil qui **garde un œil sur mon ordinateur** en me donnant à la fois la **vue d'ensemble** et le **détail**, sans dépendre d'un service cloud ni envoyer mes données ailleurs. Je voulais aussi qu'il soit **modulaire** — que chaque capacité soit une brique indépendante que j'active, ignore ou remplace selon mes besoins, sans que le reste tombe.
+
+De là, j'ai assemblé les deux moitiés du métier dans une seule interface :
+
+- une **partie défensive (blue team)** — observer, noter, expliquer et corriger ce qui se passe sur le réseau et le poste ;
+- une **partie offensive / reconnaissance (red team)** — scanner, cartographier, énumérer, tester ;
+- et par-dessus, une couche **GRC** (gouvernance, risque, conformité) pour rattacher tout ça à des référentiels reconnus.
+
+Le résultat, c'est **RED SHIELD** : un **bouclier réseau modulaire**, pensé comme un poste de commandement, où j'ai voulu qu'aucune valeur affichée ne soit inventée — c'est du **réel mesuré**, ou l'état « non connecté », jamais de la donnée de démo.
+
+---
+
 ## 📑 Sommaire
 - [Captures d'écran](#-captures-décran)
 - [Fonctionnalités](#-fonctionnalités)
+  - [Vue d'ensemble & bouclier](#️-vue-densemble--bouclier-blue-team)
+  - [Reconnaissance & offensif](#-reconnaissance--offensif-red-team)
+  - [SOC local & remédiation](#-soc-local--remédiation)
+  - [Conformité — assistant CISO (GRC)](#-conformité--assistant-ciso-grc)
+  - [Santé du poste](#-santé-du-poste)
+  - [Connecteurs, IA & extensibilité](#-connecteurs-ia--extensibilité)
+  - [Moteur mobile autonome](#-moteur-mobile-autonome)
 - [Architecture](#-architecture)
-- [Stack technique](#-stack-technique)
+- [Stack technique](#️-stack-technique)
 - [Installation & lancement](#-installation--lancement)
 - [Sécurité & confidentialité](#-sécurité--confidentialité)
 - [Tests](#-tests)
@@ -40,59 +62,96 @@ Observe les connexions de ta machine en temps réel · les note (score 0-100) ·
 
 ## 📸 Captures d'écran
 
-> _Les captures seront ajoutées ici. Dépose les fichiers PNG dans [`docs/screenshots/`](docs/screenshots/) aux noms indiqués ci-dessous._
+> _Les captures viennent ici — un PNG par fonctionnalité, à déposer dans [`docs/screenshots/`](docs/screenshots/) aux noms indiqués._
 
-| Dashboard (Command Grid) | Carte réseau & traceroute |
+| Dashboard — vue d'ensemble (Command Grid) | Bouclier — connexions notées |
 |:---:|:---:|
-| ![Dashboard](docs/screenshots/01-dashboard.png) | ![Carte réseau](docs/screenshots/02-carte-reseau.png) |
-| **Bouclier — connexions notées** | **Recon (nmap + CVE)** |
-| ![Bouclier](docs/screenshots/03-bouclier.png) | ![Recon](docs/screenshots/04-recon.png) |
-| **SOC local (HIDS + Mail)** | **Remédiation (MITRE / threat-intel)** |
-| ![SOC](docs/screenshots/05-soc.png) | ![Remédiation](docs/screenshots/06-remediation.png) |
+| ![Dashboard](docs/screenshots/01-dashboard.png) | ![Bouclier](docs/screenshots/02-bouclier.png) |
+| **Carte réseau — graphe interactif** | **Carte du monde — traceroute & flux** |
+| ![Carte réseau](docs/screenshots/03-carte-reseau.png) | ![Carte du monde](docs/screenshots/04-carte-monde.png) |
+| **Remédiation — MITRE & threat-intel** | **Conformité — assistant CISO (GRC)** |
+| ![Remédiation](docs/screenshots/05-remediation.png) | ![Conformité](docs/screenshots/06-conformite.png) |
+| **Recon — nmap + CVE (NVD) + OSI** | **Offensif — WiFi & cracker de hash** |
+| ![Recon](docs/screenshots/07-recon.png) | ![Offensif](docs/screenshots/08-offensif.png) |
+| **SOC local — HIDS, Defender & Mail** | **Santé — bilan du poste (esprit CCleaner)** |
+| ![SOC](docs/screenshots/09-soc.png) | ![Santé](docs/screenshots/10-sante.png) |
+| **Connecteurs — SIEM / IMAP / LLM chiffrés** | **Diagnostic — timeline, beaconing, historique** |
+| ![Connecteurs](docs/screenshots/11-connecteurs.png) | ![Diagnostic](docs/screenshots/12-diagnostic.png) |
 
 ---
 
 ## ✨ Fonctionnalités
 
-### 🛡️ Surveillance locale (blue team)
-- **Bouclier temps réel** : toutes les connexions (process → PID → exécutable → lignée), résolution DNS inverse, **sens entrant/sortant**, score de risque 0-100 avec explications et **corrélation MITRE ATT&CK**.
-- **Métriques réseau** : entrant/sortant, TCP/UDP, **chiffré/clair**, **ports en écoute** (surface d'exposition, exposé vs local), **pays distincts géolocalisés hors-ligne**, top ports.
-- **Débit par processus** (Mo/s ↓/↑) et **capture des paquets entrants** via `pktmon` (Windows, admin).
-- **Bande passante live** + top process.
-- **Carte réseau interactive** (canvas : zoom / pan / survol) — vues **Sortant / Entrant / Local (LAN) / Tous**.
-- **Traceroute géolocalisé** sur carte du monde, **100 % hors-ligne** (base GeoIP embarquée), détection de VPN, IP publique et **sauts**.
-- **Découverte LAN** (ARP), **beaconing C2**, **timeline**, historique **SQLite**, **export Markdown** (lisible humain & IA).
+### 🛡️ Vue d'ensemble & bouclier (blue team)
 
-### 🎯 Recon & offensif (red team)
-- **Scan nmap** + **croisement CVE** local (liens NVD) + **décomposition OSI** + **conformité CIS/ANSSI/NIST** + suggestions d'énumération.
-- **Audit WiFi** (`netsh`, alternative légère à aircrack sous Windows).
-- **Cracker de hash** (md5 / sha1 / sha256 / pbkdf2, pur Python) + **OSINT** sous-domaines (crt.sh).
+- **Dashboard « Command Grid »** : score d'exposition **0-100** en direct (jauge + sparkline), répartition saines / à surveiller / suspectes, débit et top process, raccourcis vers les actions prioritaires — le tout sur un fond cyber animé.
+- **Bouclier temps réel** : chaque connexion avec sa lignée complète **process → PID → exécutable → arbre parent**, **résolution DNS inverse**, **sens entrant/sortant**, et un **score de risque expliqué** avec **corrélation MITRE ATT&CK**.
+- **Métriques réseau agrégées** : entrant/sortant, TCP/UDP, sockets UDP, **chiffré vs clair**, **ports en écoute** (surface d'exposition : exposé au réseau vs local), **pays distincts géolocalisés hors-ligne** avec les process à l'origine des flux.
+- **Débit par processus** (Mo/s ↓/↑) et **capture des paquets entrants** via **`pktmon`** (natif Windows, mode admin) — sans pilote tiers.
+- **Carte réseau interactive** (canvas maison : zoom / pan / survol, DNS sous les nœuds) en 4 vues — **Sortant / Entrant / Local (LAN) / Tous**.
+- **Carte du monde** : **traceroute géolocalisé 100 % hors-ligne** (base GeoIP embarquée), tracé des **flux entrants/sortants** de mon appareil jusqu'à la box et aux destinations, détection de **VPN/tunnel**, IP publique et sauts. Points cliquables (IP, DNS, pays, process).
+- **Découverte LAN** (ARP), **détection de beaconing C2** (périodicité + régularité), **timeline** des événements, **historique SQLite** (snapshots) et **export Markdown** lisible par un humain comme par une IA.
+
+### 🎯 Reconnaissance & offensif (red team)
+
+- **Scan nmap** enrichi : **croisement CVE en ligne (API NVD)**, **décomposition par couche OSI**, mapping **conformité CIS / ANSSI / NIST** par port, et **suggestions d'énumération**.
+- **Vulnérabilités des applications** installées : versions des process croisées avec les **CVE NVD** en direct.
+- **Audit WiFi** (`netsh` sous Windows) : réseaux, chiffrement, canaux, évaluation du risque — l'alternative légère à aircrack là où je n'ai pas besoin d'injection.
+- **Cracker de hash** : **md5 / sha1 / sha256 / sha512 / PBKDF2**, identification automatique du type, attaque par dictionnaire — pur, local, sans dépendance.
+- **OSINT** : énumération de **sous-domaines** (crt.sh) quand le mode air-gapped est désactivé.
 
 ### 🚨 SOC local & remédiation
-- **HIDS-lite** : événements Windows sensibles (services, échecs d'auth, comptes, Defender/Sysmon).
-- **Mail Security** : analyse `.eml` (SPF/DKIM/DMARC, désalignement, liens et pièces jointes à risque) → verdict + remédiation.
-- **Remédiation** priorisée (MITRE/CVE), **réputation threat-intel** (VirusTotal/AbuseIPDB), **couper/autoriser** une connexion (pare-feu Windows : *dry-run + confirmation + annulation + audit*).
 
-### 🔌 Extensibilité
-- **Connecteurs** : clés API **chiffrées via keyring** (jamais en clair) ; **analyse IA** (LLM local Ollama ou API) sur scan / logs / mail.
-- **Thèmes live** (Command Grid par défaut) + fond cyber animé, modules du dashboard **réorganisables**.
+- **HIDS-lite** : lecture des **événements Windows sensibles** (services, échecs d'authentification, création de comptes, Defender/Sysmon).
+- **Microsoft Defender** : état réel de l'antivirus/EDR intégré (protection temps réel, signatures, derniers scans, menaces) lu via PowerShell — aucune réécriture, que de la lecture.
+- **Mail Security** : analyse d'un `.eml` (**SPF / DKIM / DMARC**, désalignement, liens et pièces jointes à risque) → **verdict + remédiation**. Fonctionne aussi côté mobile, hors-ligne.
+- **Connecteur IMAP** : relève d'une boîte réelle (mot de passe d'application en keyring, **auto-détection du serveur/port** depuis l'adresse) pour scorer les derniers messages.
+- **Remédiation priorisée** : investigation d'une connexion suspecte (arbre de process, techniques **MITRE ATT&CK**, **réputation threat-intel** VirusTotal / AbuseIPDB) et **couper / autoriser** via le **pare-feu Windows** — toujours en **dry-run → confirmation → annulation → audit**.
+
+### 📋 Conformité — assistant CISO (GRC)
+
+- Un **vrai suivi de conformité**, pas une auto-déclaration : **16 contrôles** classés par domaine et mappés à **ISO/IEC 27001:2022**, **NIST CSF 2.0** et **CIS Controls v8**, chacun avec un **« pourquoi »** et une **recommandation** en clair.
+- **Contrôles techniques auto-évalués** depuis l'état réel de la machine (ports exposés, flux en clair, antivirus/EDR, correctifs en attente, connexions suspectes, journalisation, surveillance).
+- **Contrôles organisationnels** (MFA, gestion des accès, sauvegardes, réponse à incident, sensibilisation, RGPD, fournisseurs…) **évaluables manuellement avec preuve**, persistée localement et réversible.
+- **Score pondéré par référentiel** + global, statuts *conforme / à traiter / non conforme / N-A / à évaluer*, et **export Markdown** en rapport d'audit. Tourne **en air-gapped**, zéro envoi externe.
+
+### 🩺 Santé du poste
+
+- Bilan complet dans l'esprit d'un **CCleaner**, mais sans logiciel tiers et sans toucher au registre :
+- **Espace disque récupérable** (temp, caches navigateurs Chrome/Edge/Firefox, miniatures, corbeille, Windows Update) avec **donut d'assainissement avant/après** et nettoyage **dry-run + confirmation**.
+- **Programmes au démarrage** : activation/désactivation (HKCU, avec sauvegarde) pour accélérer le boot.
+- **Mises à jour applicatives** via **winget** : détection des versions obsolètes et **installation guidée** (dry-run → confirmation), sans passer par un tiers.
+- **Point de restauration**, RAM et top process mémoire, gros fichiers, diagnostics système.
+
+### 🔌 Connecteurs, IA & extensibilité
+
+- **Connecteurs** : clés API **chiffrées via keyring** (jamais en clair), avec **auto-détection** des réglages IMAP.
+- **SIEM / EDR** : client **Wazuh** réel (auth sur l'indexeur, requête `wazuh-alerts-*/_search`), prêt à brancher un lab — les alertes remontent dans le SOC.
+- **Analyse IA** : un **LLM local (Ollama)** ou une API au choix, appliqué aux scans, logs, mails et à la **synthèse de la timeline** — activable seulement hors air-gapped.
+
+### 📱 Moteur mobile autonome
+
+Le mobile n'est **pas** une simple console de consultation : il embarque son **propre moteur, côté client, 100 % hors-ligne** ([`ui/src/mobile/offline.ts`](ui/src/mobile/offline.ts)) — **analyse d'e-mails `.eml`** (SPF/DKIM/DMARC, liens, pièces jointes) et **identification/cassage de hash** (md5/sha1/sha256/sha512 via Web Crypto). Empaqueté en **APK Android** par la CI (Tauri v2), il fonctionne sans le moteur Python.
 
 ---
 
 ## 🧩 Architecture
 
-Une **coquille stable** (registre de modules + bus d'événements + watchdog) accueille des **modules isolés** : un module qui plante passe 🔴 **sans faire tomber l'application**. Les modules communiquent via le bus, jamais en direct, et respectent un **contrat** commun (`name`, `status`, `produces/consumes`, `health`).
+Le principe directeur : une **coquille stable** — **registre de modules + bus d'événements + watchdog** — qui accueille des **briques isolées**. Un module qui plante passe 🔴 **sans faire tomber l'application** ; les modules communiquent **par le bus**, jamais en direct, et respectent tous le même **contrat** (`name`, `status`, `produces/consumes`, `health`). Une brique = un fichier.
 
 ```
 RED SHIELD
 ├── engine/                 # Moteur Python (FastAPI)
 │   └── app/
 │       ├── core/           # bus · registry · watchdog
-│       ├── modules/        # 19 modules isolés (shield, scan, trace, hids, mail, throughput…)
+│       ├── modules/        # 26 briques isolées : shield, scan, trace, hids, defender,
+│       │                   #   mail, imapmail, siem, grc, health, updater, throughput…
 │       ├── scoring/        # règles de risque · baseline · MITRE
 │       └── main.py         # API + endpoints
-└── ui/                     # Dashboard React / Vite / Tailwind
-    └── src/                # App.tsx · viz.tsx (canvas) · api.ts
+├── ui/                     # Dashboard React / Vite / Tailwind
+│   ├── src/                # App.tsx · viz.tsx (canvas) · api.ts · mobile/offline.ts
+│   └── src-tauri/          # empaquetage desktop/mobile (Tauri v2 + sidecar moteur)
+└── .github/workflows/      # Trivy · build desktop · build mobile (Android)
 ```
 
 Détails et conventions : [`CLAUDE.md`](CLAUDE.md) · [`HANDOFF.md`](HANDOFF.md) · [`spec.md`](spec.md).
@@ -100,9 +159,12 @@ Détails et conventions : [`CLAUDE.md`](CLAUDE.md) · [`HANDOFF.md`](HANDOFF.md)
 ---
 
 ## 🛠️ Stack technique
-- **Moteur** : Python 3.11+ · **FastAPI** + Uvicorn · **psutil** · **SQLModel/SQLite** · **keyring** · **maxminddb** (GeoIP hors-ligne) · httpx · pydantic.
-- **Frontend** : **React 18** · **Vite 6** · **TypeScript** · **Tailwind 4** · visualisations **canvas** (aucune lib graphique lourde).
-- **Sécurité** : API liée à `127.0.0.1`, secrets en keyring, mode **air-gapped** par défaut, validation stricte, moindre privilège.
+
+- **Moteur** : Python 3.11+ · **FastAPI** + Uvicorn · **psutil** · **SQLModel/SQLite** · **keyring** · **maxminddb** (GeoIP hors-ligne) · **httpx** · pydantic · **PyInstaller** (sidecar).
+- **Frontend** : **React 18** · **Vite 6** · **TypeScript** · **Tailwind 4** · visualisations **canvas maison** (graphe, carte du monde, jauges — aucune lib graphique lourde) · **Vitest**.
+- **Desktop / mobile** : **Tauri v2** (Rust) — installeur Windows NSIS et APK Android, moteur Python embarqué en sidecar.
+- **Outils système exploités** : `nmap`, `pktmon`, `netsh`, `winget`, PowerShell (Defender), API NVD, Wazuh, VirusTotal / AbuseIPDB, crt.sh, Ollama.
+- **CI** : **Trivy** (vulnérabilités / secrets / mauvaises configs) + workflows de build desktop & mobile.
 
 ---
 
@@ -110,8 +172,8 @@ Détails et conventions : [`CLAUDE.md`](CLAUDE.md) · [`HANDOFF.md`](HANDOFF.md)
 
 ### Prérequis
 - **Python 3.11+** (testé 3.14 — sous Windows, lancer avec `py` ; `python` est le stub Microsoft Store)
-- **Node.js 18+** (testé v24)
-- *nmap* (optionnel, pour l'onglet Recon)
+- **Node.js 18+**
+- *nmap* (optionnel, onglet Recon)
 
 ### Installation rapide
 ```powershell
@@ -134,31 +196,36 @@ cd engine
 cd ui
 npm run dev
 ```
-Puis ouvre **http://localhost:5173**. Le dashboard proxifie `/api` vers le moteur (`127.0.0.1:8787`).
+Puis j'ouvre **http://localhost:5173** — le dashboard proxifie `/api` vers le moteur (`127.0.0.1:8787`).
 
 ### Capture de débit par processus (optionnel, Windows)
-La capture `pktmon` nécessite les **droits administrateur**. Lance le moteur élevé via le helper fourni :
+`pktmon` demande les **droits administrateur** :
 ```powershell
 ./run-admin.ps1      # auto-élévation UAC
 ```
-Sans admin, l'application fonctionne normalement et retombe sur le proxy « nombre de connexions ».
+Sans admin, l'application fonctionne et retombe sur le proxy « nombre de connexions ».
 
 ---
 
 ## 🔒 Sécurité & confidentialité
-- **Mode air-gapped par défaut** : coupe **tout appel à une API tierce** (réputation, OSINT, LLM distant). Les analyses restent **sur ta machine**.
-- **Zéro donnée inventée** : chaque valeur affichée provient d'une **mesure réelle** (psutil, nmap, pktmon, base GeoIP embarquée…) ou de l'état « non connecté ». Aucune donnée de démo.
-- **Secrets** : jamais en clair — stockés via **keyring / Credential Manager**. `.env` hors versionnement, `.env.example` sans valeur.
-- **Analyse de sécurité continue** : **Trivy** scanne chaque push (vulnérabilités, secrets, mauvaises configurations) — voir [`.github/workflows/trivy.yml`](.github/workflows/trivy.yml).
-- **Actions système** (couper une connexion, pare-feu) : **dry-run + confirmation + annulation + audit**.
-- **API** liée à `127.0.0.1` ; exposition LAN opt-in (consultation mobile) uniquement.
+
+- **Mode air-gapped par défaut** : coupe **tout appel à une API tierce** (NVD, réputation, OSINT, LLM distant, SIEM). Les analyses restent **sur la machine**.
+- **Zéro donnée inventée** : chaque valeur provient d'une **mesure réelle** (psutil, nmap, pktmon, Defender, GeoIP embarquée…) ou affiche l'état « non connecté ».
+- **Secrets** : jamais en clair — **keyring / Credential Manager**. `.env` hors versionnement, `.env.example` sans valeur.
+- **Analyse de sécurité continue** : **Trivy** à chaque push — voir [`.github/workflows/trivy.yml`](.github/workflows/trivy.yml).
+- **Actions système** (couper une connexion, pare-feu, nettoyage, mise à jour) : **dry-run + confirmation + annulation + audit**.
+- **API** liée à `127.0.0.1` ; validation stricte des entrées, listes blanches de commandes, aucun shell libre depuis l'UI.
 
 ---
 
 ## 🧪 Tests
+
 ```bash
-cd engine
-.venv/Scripts/python.exe -m pytest -q      # 43 tests
+# Backend
+cd engine && .venv/Scripts/python.exe -m pytest -q      # 82 tests
+
+# Frontend
+cd ui && npx vitest run                                  # 7 tests
 ```
 
 ---
@@ -175,4 +242,5 @@ Distribué sous **[PolyForm Noncommercial License 1.0.0](LICENSE)**.
 ---
 
 ## ⚠️ Avertissement
+
 RED SHIELD est un outil éducatif et défensif fourni « en l'état », **sans aucune garantie**. L'utilisateur est seul responsable de son usage et doit respecter la législation applicable ainsi que les autorisations nécessaires avant tout scan ou analyse d'une cible. Les auteurs déclinent toute responsabilité en cas d'usage abusif.
