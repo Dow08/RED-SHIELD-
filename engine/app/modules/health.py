@@ -427,10 +427,15 @@ class HealthModule(Module):
         now = time.time()
         reclaimable = freed = 0.0
         for d in dirs:
-            for root, _dirs, names in os.walk(d):
+            for root, subdirs, names in os.walk(d):
+                # Défense en profondeur : ne JAMAIS descendre dans un lien/jonction
+                # (un cache piégé pourrait pointer hors du dossier ciblé).
+                subdirs[:] = [sd for sd in subdirs if not os.path.islink(os.path.join(root, sd))]
                 for n in names:
                     fp = os.path.join(root, n)
                     try:
+                        if os.path.islink(fp):     # on ne suit pas les liens symboliques
+                            continue
                         size = os.path.getsize(fp)
                         if now - os.path.getmtime(fp) < 3600:   # protège les fichiers récents / en usage
                             continue

@@ -234,6 +234,17 @@ def create_app() -> FastAPI:
         trace_mod = registry.get("trace")
         return trace_mod.geo_lookup_fn() if trace_mod is not None else None
 
+    def _optional(name: str, method: str, *args, fallback=None, **kwargs):
+        """Lecture souple : appelle `module.method(...)` si le module existe, sinon `fallback`.
+
+        Convention : **lecture = souple** (dégrade proprement si un module manque),
+        **action système = stricte** (`_require`, renvoie 503). Les endpoints avec effet
+        de bord/audit gardent leur logique explicite."""
+        module = registry.get(name)
+        if module is None:
+            return fallback
+        return getattr(module, method)(*args, **kwargs)
+
     @app.get("/shield/connections")
     def shield_connections() -> list:
         conns = _require("shield").get_connections()
@@ -285,13 +296,11 @@ def create_app() -> FastAPI:
 
     @app.get("/throughput/status")
     def throughput_status():
-        module = registry.get("throughput")
-        return module.status() if module is not None else {"available": False, "reason": "module indisponible"}
+        return _optional("throughput", "status", fallback={"available": False, "reason": "module indisponible"})
 
     @app.get("/throughput/processes")
     def throughput_processes():
-        module = registry.get("throughput")
-        return module.processes() if module is not None else []
+        return _optional("throughput", "processes", fallback=[])
 
     @app.get("/exposure")
     def exposure():
@@ -335,10 +344,7 @@ def create_app() -> FastAPI:
 
     @app.get("/wifi/networks")
     def wifi_networks():
-        module = registry.get("wifi")
-        if module is None:
-            return {"networks": [], "message": "module WiFi indisponible"}
-        return module.result()
+        return _optional("wifi", "result", fallback={"networks": [], "message": "module WiFi indisponible"})
 
     @app.post("/crack")
     def crack(req: CrackRequest):
@@ -346,8 +352,7 @@ def create_app() -> FastAPI:
 
     @app.get("/scan")
     def scan_get():
-        module = registry.get("scan")
-        return module.get() if module is not None else {}
+        return _optional("scan", "get", fallback={})
 
     @app.post("/scan/run")
     def scan_run(req: ScanRequest):
@@ -360,33 +365,27 @@ def create_app() -> FastAPI:
 
     @app.get("/procvuln")
     def procvuln_get():
-        module = registry.get("procvuln")
-        return module.get() if module is not None else {"available": False}
+        return _optional("procvuln", "get", fallback={"available": False})
 
     @app.post("/procvuln/run")
     def procvuln_run():
-        module = registry.get("procvuln")
-        return module.run_async() if module is not None else {"ok": False, "error": "indisponible"}
+        return _optional("procvuln", "run_async", fallback={"ok": False, "error": "indisponible"})
 
     @app.get("/hids")
     def hids_get():
-        module = registry.get("hids")
-        return module.get() if module is not None else {}
+        return _optional("hids", "get", fallback={})
 
     @app.post("/hids/run")
     def hids_run():
-        module = registry.get("hids")
-        return module.run_async() if module is not None else {"ok": False, "error": "indisponible"}
+        return _optional("hids", "run_async", fallback={"ok": False, "error": "indisponible"})
 
     @app.get("/defender")
     def defender_get():
-        module = registry.get("defender")
-        return module.get() if module is not None else {"available": False, "reason": "module indisponible"}
+        return _optional("defender", "get", fallback={"available": False, "reason": "module indisponible"})
 
     @app.post("/defender/run")
     def defender_run():
-        module = registry.get("defender")
-        return module.run_async() if module is not None else {"ok": False, "error": "indisponible"}
+        return _optional("defender", "run_async", fallback={"ok": False, "error": "indisponible"})
 
     @app.post("/mail/analyze")
     def mail_analyze(req: MailRequest):
@@ -394,18 +393,15 @@ def create_app() -> FastAPI:
 
     @app.get("/imap/status")
     def imap_status():
-        module = registry.get("imapmail")
-        return module.status() if module is not None else {"configured": False}
+        return _optional("imapmail", "status", fallback={"configured": False})
 
     @app.get("/imap/check")
     def imap_check(limit: int = 15):
-        module = registry.get("imapmail")
-        return module.check(limit=limit) if module is not None else {"available": False, "reason": "indisponible"}
+        return _optional("imapmail", "check", limit=limit, fallback={"available": False, "reason": "indisponible"})
 
     @app.get("/connectors")
     def connectors_status():
-        module = registry.get("connectors")
-        return module.status() if module is not None else []
+        return _optional("connectors", "status", fallback=[])
 
     @app.post("/connectors/{name}")
     def connectors_set(name: str, req: KeyReq):
@@ -429,8 +425,7 @@ def create_app() -> FastAPI:
 
     @app.get("/siem/status")
     def siem_status():
-        module = registry.get("siem")
-        return module.status() if module is not None else {"configured": False}
+        return _optional("siem", "status", fallback={"configured": False})
 
     @app.post("/siem/test")
     def siem_test():
@@ -458,13 +453,11 @@ def create_app() -> FastAPI:
 
     @app.get("/health/report")
     def health_report():
-        module = registry.get("health")
-        return module.get() if module is not None else {"available": False}
+        return _optional("health", "get", fallback={"available": False})
 
     @app.post("/health/run")
     def health_run():
-        module = registry.get("health")
-        return module.run_async() if module is not None else {"ok": False}
+        return _optional("health", "run_async", fallback={"ok": False})
 
     @app.post("/health/clean")
     def health_clean(req: CleanReq):
@@ -495,13 +488,11 @@ def create_app() -> FastAPI:
 
     @app.get("/updater/list")
     def updater_list():
-        module = registry.get("updater")
-        return module.get() if module is not None else {"available_tool": False}
+        return _optional("updater", "get", fallback={"available_tool": False})
 
     @app.post("/updater/run")
     def updater_run():
-        module = registry.get("updater")
-        return module.run_async() if module is not None else {"ok": False}
+        return _optional("updater", "run_async", fallback={"ok": False})
 
     @app.post("/updater/upgrade")
     def updater_upgrade(req: UpgradeReq):
@@ -514,45 +505,35 @@ def create_app() -> FastAPI:
 
     @app.get("/lan/devices")
     def lan_devices():
-        module = registry.get("lan")
-        return module.devices() if module is not None else []
+        return _optional("lan", "devices", fallback=[])
 
     @app.post("/firewall/block")
     def firewall_block(req: FwRequest):
         result = _require("firewall").block(req.ip, dry_run=req.dry_run)
-        persist = registry.get("persistence")
-        if persist is not None and persist.health() == ModuleStatus.ACTIVE and not req.dry_run:
-            persist.add_audit("firewall_block", req.ip)
+        _audit("firewall_block", req.ip, when=not req.dry_run)
         return result
 
     @app.post("/firewall/unblock")
     def firewall_unblock(req: FwRequest):
         result = _require("firewall").unblock(req.ip)
-        persist = registry.get("persistence")
-        if persist is not None and persist.health() == ModuleStatus.ACTIVE:
-            persist.add_audit("firewall_unblock", req.ip)
+        _audit("firewall_unblock", req.ip)
         return result
 
     @app.post("/firewall/block-port")
     def firewall_block_port(req: FwPortRequest):
         result = _require("firewall").block_port(req.port, req.protocol, dry_run=req.dry_run)
-        persist = registry.get("persistence")
-        if persist is not None and persist.health() == ModuleStatus.ACTIVE and not req.dry_run:
-            persist.add_audit("firewall_block_port", f"{req.protocol}/{req.port}")
+        _audit("firewall_block_port", f"{req.protocol}/{req.port}", when=not req.dry_run)
         return result
 
     @app.post("/firewall/unblock-port")
     def firewall_unblock_port(req: FwPortRequest):
         result = _require("firewall").unblock_port(req.port, req.protocol)
-        persist = registry.get("persistence")
-        if persist is not None and persist.health() == ModuleStatus.ACTIVE:
-            persist.add_audit("firewall_unblock_port", f"{req.protocol}/{req.port}")
+        _audit("firewall_unblock_port", f"{req.protocol}/{req.port}")
         return result
 
     @app.get("/firewall/rules")
     def firewall_rules():
-        module = registry.get("firewall")
-        return module.list_rules() if module is not None else []
+        return _optional("firewall", "list_rules", fallback=[])
 
     @app.get("/grc")
     def grc_posture():

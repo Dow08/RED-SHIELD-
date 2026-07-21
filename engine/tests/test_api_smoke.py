@@ -50,3 +50,29 @@ def test_export_endpoints_are_markdown():
         for path in ("/report/markdown", "/grc/export", "/diagnostic/logs/export"):
             r = client.get(path)
             assert r.status_code == 200 and len(r.text) > 0
+
+
+def test_action_endpoints_dry_run_no_side_effect():
+    """Les POST d'action en dry-run ne modifient rien et ne renvoient jamais 5xx."""
+    app = create_app()
+    with TestClient(app) as client:
+        # firewall : dry-run → aperçu de la commande, aucune règle posée
+        r = client.post("/firewall/block", json={"ip": "203.0.113.9", "dry_run": True})
+        assert r.status_code < 500
+        # nettoyage santé : dry-run → calcul du récupérable, aucune suppression
+        r = client.post("/health/clean", json={"category": "temp", "dry_run": True})
+        assert r.status_code < 500
+        if r.status_code == 200:
+            assert r.json().get("dry_run") is True and r.json().get("deleted_files", 0) == 0
+
+
+def test_grc_control_rejects_bad_id():
+    app = create_app()
+    with TestClient(app) as client:
+        assert client.post("/grc/control", json={"id": "inconnu", "status": "conforme"}).status_code == 400
+
+
+def test_connector_rejects_unknown_name():
+    app = create_app()
+    with TestClient(app) as client:
+        assert client.post("/connectors/arbitraire", json={"key": "x"}).status_code == 400
