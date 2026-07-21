@@ -959,6 +959,24 @@ function Soc({ hids, defender }: { hids: HidsResult | null; defender: import("./
 }
 
 /* ============ CONNECTEURS ============ */
+const IMAP_PROVIDERS: Record<string, [string, number]> = {
+  "gmail.com": ["imap.gmail.com", 993], "googlemail.com": ["imap.gmail.com", 993],
+  "outlook.com": ["outlook.office365.com", 993], "outlook.fr": ["outlook.office365.com", 993],
+  "hotmail.com": ["outlook.office365.com", 993], "hotmail.fr": ["outlook.office365.com", 993],
+  "live.com": ["outlook.office365.com", 993], "live.fr": ["outlook.office365.com", 993], "msn.com": ["outlook.office365.com", 993],
+  "yahoo.com": ["imap.mail.yahoo.com", 993], "yahoo.fr": ["imap.mail.yahoo.com", 993],
+  "icloud.com": ["imap.mail.me.com", 993], "me.com": ["imap.mail.me.com", 993],
+  "aol.com": ["imap.aol.com", 993], "gmx.com": ["imap.gmx.net", 993], "gmx.fr": ["imap.gmx.net", 993],
+  "orange.fr": ["imap.orange.fr", 993], "wanadoo.fr": ["imap.orange.fr", 993], "free.fr": ["imap.free.fr", 993],
+  "laposte.net": ["imap.laposte.net", 993], "sfr.fr": ["imap.sfr.fr", 993], "bbox.fr": ["imap.bbox.fr", 993],
+  "zoho.com": ["imap.zoho.com", 993],
+};
+function imapAutodetect(email: string): { host: string; port: number } | null {
+  const dom = email.split("@")[1]?.toLowerCase().trim();
+  if (!dom) return null;
+  if (IMAP_PROVIDERS[dom]) return { host: IMAP_PROVIDERS[dom][0], port: IMAP_PROVIDERS[dom][1] };
+  return { host: "imap." + dom, port: 993 }; // supposition raisonnable (convention imap.<domaine>)
+}
 function Connecteurs({ airgapped, connectors, onRefresh }: { airgapped: boolean; connectors: ConnectorStatus[]; onRefresh: () => void }) {
   const [keys, setKeys] = useState<Record<string, string>>({});
   const [llm, setLlm] = useState({ provider: "ollama", url: "http://localhost:11434", model: "llama3", key: "" });
@@ -1012,12 +1030,12 @@ function Connecteurs({ airgapped, connectors, onRefresh }: { airgapped: boolean;
       <div className="disc" style={{ padding: "0 16px 14px" }}>Formats supportés : Wazuh (API REST), Elasticsearch (_search), ou tout endpoint JSON renvoyant une liste d'alertes. Les alertes rapatriées apparaissent dans le SOC.</div>
 
       <div className="card-h" style={{ marginTop: 4 }}><h2>Surveillance mail (IMAP)</h2></div>
-      <div className="note">Analyse automatique de tes derniers mails (SPF/DKIM/DMARC, liens, pièces jointes) → alerte phishing/ransomware dans le <b>SOC</b>. Utilise un <b>mot de passe d'application</b> (jamais ton mot de passe principal), chiffré en keyring, jamais réaffiché. Lecture seule. Nécessite <b>air-gapped OFF</b>.</div>
+      <div className="note">Analyse automatique de tes derniers mails (SPF/DKIM/DMARC, liens, pièces jointes) → alerte phishing/ransomware dans le <b>SOC</b>. <b>Serveur/port détectés automatiquement</b> depuis ton adresse (gmail, outlook, yahoo, orange, free…). Utilise un <b>mot de passe d'application</b> (jamais ton mot de passe principal), chiffré en keyring, jamais réaffiché. Lecture seule. Nécessite <b>air-gapped OFF</b>.</div>
       <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
         <span className="nm">IMAP</span>
-        <input className="key" style={{ letterSpacing: 0, width: 190 }} value={imap.host} onChange={(e) => setImap({ ...imap, host: e.target.value })} placeholder="serveur (ex. imap.gmail.com)" />
+        <input className="key" style={{ letterSpacing: 0, width: 180 }} value={imap.username} onChange={(e) => { const u = e.target.value; const d = imapAutodetect(u); setImap({ ...imap, username: u, host: d ? d.host : imap.host, port: d ? d.port : imap.port }); }} placeholder="adresse mail (auto-détection)" />
+        <input className="key" style={{ letterSpacing: 0, width: 190 }} value={imap.host} onChange={(e) => setImap({ ...imap, host: e.target.value })} placeholder="serveur (auto)" />
         <input className="key" type="number" style={{ letterSpacing: 0, width: 80 }} value={imap.port} onChange={(e) => setImap({ ...imap, port: +e.target.value })} placeholder="993" />
-        <input className="key" style={{ letterSpacing: 0, width: 180 }} value={imap.username} onChange={(e) => setImap({ ...imap, username: e.target.value })} placeholder="adresse mail" />
         <input className="key" type="password" style={{ width: 160 }} value={imap.password} onChange={(e) => setImap({ ...imap, password: e.target.value })} placeholder="mot de passe d'application" />
         <button className="btn ghost" disabled={!imap.host.trim() || !imap.username.trim() || !imap.password.trim()} onClick={saveImap}>Enregistrer</button>
         {connected("imap") ? <><span className="stt on">configuré ✓</span><button className="btn ghost" onClick={() => del("imap")}>Supprimer</button></> : <span className="stt off">non configuré</span>}
