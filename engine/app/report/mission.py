@@ -22,6 +22,7 @@ _BAND_LABEL = {"faible": "Exposition faible", "elevee": "Exposition élevée", "
 
 class MissionMeta(BaseModel):
     marque: str = "DP Cyber Consulting"
+    titre: str = "Audit de sécurité"
     consultant: str = "D. Poncelet"
     client: str = "—"
     perimetre: str = "Poste de travail (audit local)"

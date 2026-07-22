@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
-import type { ReportMeta, ReportMission, ReportFinding, Sev } from "../api";
+import type { ReportMeta, ReportMission, ReportFinding, Sev, Attachment } from "../api";
 import { Card } from "../shared";
+import { toAttachment } from "../lib/img";
 
 const RING = (band: string) => (band === "critique" ? "#b4232a" : band === "elevee" ? "#b7791f" : "#2f7d4f");
 
@@ -80,17 +81,18 @@ export default function Rapport() {
     [a[i], a[j]] = [a[j], a[i]]; return { ...m, findings: a };
   });
   const toggleSection = (k: string) => setModel((m) => m && { ...m, sections: { ...m.sections, [k]: !m.sections[k] } });
-  const onLogo = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onLogo = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0]; if (!f) return;
-    const r = new FileReader(); r.onload = () => upMeta({ logo: String(r.result) }); r.readAsDataURL(f);
+    const att = await toAttachment(f, { maxDim: 320, mime: "image/png" });
+    upMeta({ logo: att.data });
   };
-  const addAnnexes = (files: FileList | null) => {
+  const addAnnexes = async (files: FileList | null) => {
     if (!files) return;
-    Array.from(files).slice(0, 12).forEach((f) => {
-      const r = new FileReader();
-      r.onload = () => setModel((mm) => mm && { ...mm, annexes: [...(mm.annexes || []), { name: f.name, type: f.type, data: String(r.result) }] });
-      r.readAsDataURL(f);
-    });
+    setMsg("Traitement des captures…");
+    const news: Attachment[] = [];
+    for (const f of Array.from(files).slice(0, 12)) news.push(await toAttachment(f, { maxDim: 1600, quality: 0.82 }));
+    setModel((mm) => mm && { ...mm, annexes: [...(mm.annexes || []), ...news] });
+    setMsg(`${news.length} capture(s) ajoutée(s) — pense à Enregistrer`);
   };
 
   const m = model;
@@ -213,8 +215,8 @@ export default function Rapport() {
                 <g fill="#f4d9c4"><circle cx="110" cy="55" r="2.6" /><circle cx="200" cy="95" r="2.6" /><circle cx="160" cy="128" r="2.6" /><circle cx="270" cy="124" r="2.6" /><circle cx="380" cy="80" r="2.6" /></g>
               </svg>
             </div>
-            <div className="r-title">Audit<br /><em>sécurité</em></div>
-            <div className="r-sub">{m.meta.perimetre} — {m.meta.client}</div>
+            <Editable className="r-title" value={m.meta.titre} ph="Titre du rapport" onCommit={(v) => upMeta({ titre: v })} />
+            <Editable className="r-sub" value={`${m.meta.perimetre} — ${m.meta.client}`} ph="Sous-titre" onCommit={(v) => { const [p, ...rest] = v.split(" — "); upMeta({ perimetre: p.trim(), client: (rest.join(" — ") || m.meta.client).trim() }); }} />
             <div className="r-big">
               <div className="v">{m.score}</div>
               <div className="x">/100 · {m.band_label.toLowerCase()}<br />{m.meta.date} · {m.meta.reference}</div>
@@ -252,8 +254,8 @@ export default function Rapport() {
                     <tr key={f.id}>
                       <td style={{ width: 70 }}><span className={`r-sev ${f.severity}`}>{f.severity}</span></td>
                       <td>
-                        <div className="rt">{f.title}</div>
-                        {(f.detail || f.description) && <div className="rd">{f.detail || f.description}</div>}
+                        <Editable className="rt" value={f.title} ph="Titre du constat" onCommit={(v) => upFinding(f.id, { title: v })} />
+                        <Editable className="rd" value={f.detail || f.description} ph="Détail du constat…" onCommit={(v) => upFinding(f.id, { detail: v })} />
                         <Editable className="r-annot" value={f.note} ph="✏️ annoter ce constat…" onCommit={(v) => upFinding(f.id, { note: v })} />
                       </td>
                       <td className="mono" style={{ width: 90, textAlign: "right" }}>

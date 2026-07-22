@@ -4,6 +4,7 @@ import type { Beacon, ConnectorStatus, CrackResult, HidsResult, IntelResult, Lan
 import { BandwidthChart, NetworkGraph, Sparkline, TraceMap } from "../viz";
 import { SEV_META, bandColor, bandLabel, fr, Card, ReputationButton, CutButton, ClosePortButton, Reorderable, Gauge, ConnRow, DualBar, Mtile, PortChips, AiAnalyzeButton } from "../shared";
 import Rapport from "./Rapport";
+import { toAttachment } from "../lib/img";
 
 const GRC_STATUS_META: Record<string, { label: string; color: string; short: string }> = {
   conforme: { label: "Conforme", color: "var(--safe)", short: "CONFORME" },
@@ -35,13 +36,11 @@ type Att = import("../api").Attachment;
 const STATUS_FR: Record<string, string> = { conforme: "Conforme", a_traiter: "À traiter", non_conforme: "Non conforme", na: "Non applicable", manuel: "À évaluer" };
 
 function EvidenceBox({ note, setNote, atts, setAtts }: { note: string; setNote: (v: string) => void; atts: Att[]; setAtts: (a: Att[]) => void }) {
-  const addFiles = (files: FileList | null) => {
+  const addFiles = async (files: FileList | null) => {
     if (!files) return;
-    Array.from(files).slice(0, 10).forEach((f) => {
-      const r = new FileReader();
-      r.onload = () => setAtts([...atts, { name: f.name, type: f.type, data: String(r.result) }]);
-      r.readAsDataURL(f);
-    });
+    const news: Att[] = [];
+    for (const f of Array.from(files).slice(0, 10)) news.push(await toAttachment(f, { maxDim: 1600, quality: 0.82 }));
+    setAtts([...atts, ...news]);
   };
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
