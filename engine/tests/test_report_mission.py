@@ -2,6 +2,7 @@
 from fastapi.testclient import TestClient
 
 from app.main import create_app
+import app.report.mission as mission
 from app.report.mission import build_model
 
 
@@ -56,6 +57,12 @@ def test_default_meta_reference_and_date():
     assert m.meta.reference.startswith("DPC-") and "/" in m.meta.date
 
 
+def test_findings_have_stable_id_and_included():
+    m = build_model(_raw())
+    assert all(f.id for f in m.findings) and len(set(f.id for f in m.findings)) == len(m.findings)
+    assert all(f.included for f in m.findings)   # inclus par défaut
+
+
 def test_endpoint_returns_model():
     app = create_app()
     with TestClient(app) as client:
@@ -64,3 +71,23 @@ def test_endpoint_returns_model():
         d = r.json()
         assert d["meta"]["client"] == "ACME SAS"
         assert "findings" in d and "verdict" in d and "conformity" in d
+        assert "sections" in d
+
+
+def test_draft_roundtrip(tmp_path, monkeypatch):
+    monkeypatch.setattr(mission, "_draft_path", lambda: tmp_path / "report_draft.json")
+    assert mission.load_draft() is None
+    mission.save_draft({"meta": {"client": "X"}, "findings": []})
+    assert mission.load_draft()["meta"]["client"] == "X"
+    mission.clear_draft()
+    assert mission.load_draft() is None
+
+
+def test_draft_endpoints():
+    app = create_app()
+    with TestClient(app) as client:
+        client.delete("/report/draft")
+        assert client.get("/report/draft").json() == {"exists": False}
+        assert client.post("/report/draft", json={"meta": {"client": "Z"}, "findings": []}).json()["ok"] is True
+        assert client.get("/report/draft").json()["meta"]["client"] == "Z"
+        client.delete("/report/draft")

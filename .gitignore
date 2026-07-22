@@ -20,6 +20,7 @@ engine/data/*.db
 engine/data/*.mmdb
 engine/data/*.csv
 engine/data/grc_state.json
+engine/data/report_draft.json
 
 # Build / packaging
 build/

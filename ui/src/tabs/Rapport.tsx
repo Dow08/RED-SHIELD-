@@ -1,50 +1,144 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import type { ReportMeta, ReportMission } from "../api";
+import type { ReportMeta, ReportMission, ReportFinding, Sev } from "../api";
+import { Card } from "../shared";
 
 const RING = (band: string) => (band === "critique" ? "#b4232a" : band === "elevee" ? "#b7791f" : "#2f7d4f");
+const SEVS: Sev[] = ["crit", "haut", "moyen", "faible"];
+const SECTIONS: [string, string][] = [["constats", "Constats"], ["remediation", "Remédiation"], ["conformite", "Conformité"], ["annexe", "Annexe / captures"]];
 
 export default function Rapport() {
   const [model, setModel] = useState<ReportMission | null>(null);
   const [busy, setBusy] = useState(false);
-  const [client, setClient] = useState("");
-  const [perimetre, setPerimetre] = useState("");
-  const [consultant, setConsultant] = useState("D. Poncelet");
+  const [msg, setMsg] = useState("");
+  const [showEditor, setShowEditor] = useState(true);
 
-  const assemble = async () => {
-    setBusy(true);
-    const meta: Partial<ReportMeta> = { consultant };
-    if (client.trim()) meta.client = client.trim();
-    if (perimetre.trim()) meta.perimetre = perimetre.trim();
-    try { setModel(await api.reportMission(meta)); } catch { /* moteur injoignable */ }
+  // -- chargement : brouillon sauvegardé, sinon assemblage frais ----------
+  useEffect(() => {
+    (async () => {
+      try {
+        const d = await api.reportDraftGet();
+        if (d && (d as ReportMission).findings) { setModel(d as ReportMission); return; }
+      } catch { /* moteur injoignable */ }
+      assemble();
+    })();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const assemble = async (over?: Partial<ReportMeta>) => {
+    setBusy(true); setMsg("");
+    const meta: Partial<ReportMeta> = { ...(model?.meta || {}), ...(over || {}) };
+    try { setModel(await api.reportMission(meta)); } catch { /* */ }
     setBusy(false);
   };
-  useEffect(() => { assemble(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const reassemble = () => {
+    if (confirm("Ré-assembler depuis les données réelles ? Tes retouches (annotations, ordre, masquages) seront remplacées.")) assemble();
+  };
+  const save = async () => {
+    if (!model) return;
+    setBusy(true);
+    try { await api.reportDraftSave(model); setMsg("Brouillon enregistré ✅"); } catch { setMsg("échec de sauvegarde"); }
+    setBusy(false);
+  };
+
+  // -- mutateurs -----------------------------------------------------------
+  const upMeta = (patch: Partial<ReportMeta>) => setModel((m) => m && { ...m, meta: { ...m.meta, ...patch } });
+  const upFinding = (id: string, patch: Partial<ReportFinding>) =>
+    setModel((m) => m && { ...m, findings: m.findings.map((f) => (f.id === id ? { ...f, ...patch } : f)) });
+  const move = (id: string, dir: -1 | 1) => setModel((m) => {
+    if (!m) return m;
+    const a = [...m.findings]; const i = a.findIndex((f) => f.id === id); const j = i + dir;
+    if (i < 0 || j < 0 || j >= a.length) return m;
+    [a[i], a[j]] = [a[j], a[i]]; return { ...m, findings: a };
+  });
+  const toggleSection = (k: string) => setModel((m) => m && { ...m, sections: { ...m.sections, [k]: !m.sections[k] } });
+  const onLogo = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0]; if (!f) return;
+    const r = new FileReader(); r.onload = () => upMeta({ logo: String(r.result) }); r.readAsDataURL(f);
+  };
 
   const m = model;
-  const withRemed = (m?.findings || []).filter((f) => f.remediation);
+  const shown = (m?.findings || []).filter((f) => f.included);
+  const withRemed = shown.filter((f) => f.remediation);
+  const sec = m?.sections || {};
 
   return (
     <>
+      {/* ================= ÉDITEUR (ne s'imprime pas) ================= */}
       <div className="no-print">
-        <div className="note">Rapport de <b>mission</b> — assemblé depuis les <b>données réelles</b> du poste (exposition, conformité GRC, vulnérabilités applicatives). Rien d'inventé. Renseigne le client, puis <b>Générer le PDF</b> (impression → « Enregistrer en PDF »). L'édition/annotation complète arrive en phase 2.</div>
-        <div className="toolbar" style={{ gap: 8, flexWrap: "wrap" }}>
-          <input className="key" style={{ letterSpacing: 0, width: 190 }} placeholder="Client" value={client} onChange={(e) => setClient(e.target.value)} />
-          <input className="key" style={{ letterSpacing: 0, width: 190 }} placeholder="Périmètre" value={perimetre} onChange={(e) => setPerimetre(e.target.value)} />
-          <input className="key" style={{ letterSpacing: 0, width: 150 }} placeholder="Consultant" value={consultant} onChange={(e) => setConsultant(e.target.value)} />
-          <button className="btn ghost" disabled={busy} onClick={assemble}>{busy ? "Assemblage…" : "↻ Assembler"}</button>
-          <button className="btn" disabled={!m} onClick={() => window.print()}>⬇ Générer le PDF</button>
-        </div>
+        <Card title="Rapport de mission — éditeur" right={
+          <span style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
+            {msg && <span className="muted" style={{ fontSize: 11, color: "var(--safe)" }}>{msg}</span>}
+            <button className="btn ghost" onClick={() => setShowEditor((s) => !s)}>{showEditor ? "Masquer l'éditeur" : "Éditer"}</button>
+            <button className="btn ghost" disabled={busy} onClick={reassemble}>↻ Ré-assembler</button>
+            <button className="btn ghost" disabled={busy || !m} onClick={save}>💾 Enregistrer</button>
+            <button className="btn" disabled={!m} onClick={() => window.print()}>⬇ Générer le PDF</button>
+          </span>
+        }>
+          <div className="note">Document <b>vivant</b> : les faits viennent des <b>données réelles</b> (rien d'inventé), et tu retouches ici avant l'export — client, <b>annotations</b> par constat, ordre, masquage, marque/logo. Sauvegarde pour reprendre plus tard.</div>
+
+          {showEditor && m && (
+            <div style={{ padding: "4px 16px 14px", display: "flex", flexDirection: "column", gap: 12 }}>
+              {/* méta */}
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <input className="key" style={{ letterSpacing: 0, width: 190 }} placeholder="Client" value={m.meta.client} onChange={(e) => upMeta({ client: e.target.value })} />
+                <input className="key" style={{ letterSpacing: 0, width: 220 }} placeholder="Périmètre" value={m.meta.perimetre} onChange={(e) => upMeta({ perimetre: e.target.value })} />
+                <input className="key" style={{ letterSpacing: 0, width: 150 }} placeholder="Consultant" value={m.meta.consultant} onChange={(e) => upMeta({ consultant: e.target.value })} />
+                <input className="key" style={{ letterSpacing: 0, width: 140 }} placeholder="Référence" value={m.meta.reference} onChange={(e) => upMeta({ reference: e.target.value })} />
+                <label className="btn ghost" style={{ cursor: "pointer" }}>{m.meta.logo ? "Logo ✓" : "Logo…"}<input type="file" accept="image/*" onChange={onLogo} style={{ display: "none" }} /></label>
+                {m.meta.logo && <button className="btn ghost" style={{ padding: "4px 9px" }} onClick={() => upMeta({ logo: "" })}>✕</button>}
+              </div>
+
+              {/* sections */}
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", fontSize: 12 }}>
+                <span className="muted" style={{ fontSize: 11 }}>Sections :</span>
+                {SECTIONS.map(([k, label]) => (
+                  <label key={k} style={{ display: "inline-flex", gap: 5, alignItems: "center", color: "var(--soft)" }}>
+                    <input type="checkbox" checked={sec[k] !== false} onChange={() => toggleSection(k)} />{label}
+                  </label>
+                ))}
+              </div>
+
+              {/* verdict éditable */}
+              <div>
+                <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>Synthèse / verdict (éditable)</div>
+                <textarea value={m.verdict} onChange={(e) => setModel((mm) => mm && { ...mm, verdict: e.target.value })}
+                  rows={3} style={{ width: "100%", background: "var(--card-solid)", border: "1px solid var(--card-b)", borderRadius: 8, color: "var(--ink)", fontFamily: "var(--ui)", fontSize: 12.5, padding: 8 }} />
+              </div>
+
+              {/* findings */}
+              <div>
+                <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>Constats — inclure / réordonner / annoter</div>
+                {m.findings.length === 0 && <div className="empty">Aucun constat (poste sain).</div>}
+                {m.findings.map((f) => (
+                  <div key={f.id} className="rcard" style={{ opacity: f.included ? 1 : 0.5, borderLeft: `3px solid ${f.severity === "crit" ? "var(--crit)" : f.severity === "haut" ? "#c77416" : f.severity === "moyen" ? "var(--watch)" : "var(--safe)"}` }}>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                      <input type="checkbox" checked={f.included} onChange={(e) => upFinding(f.id, { included: e.target.checked })} title="Inclure dans le rapport" />
+                      <select className="key" style={{ width: "auto", letterSpacing: 0, padding: "3px 6px" }} value={f.severity} onChange={(e) => upFinding(f.id, { severity: e.target.value as Sev })}>
+                        {SEVS.map((s) => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                      <span className="rtitle" style={{ fontSize: 12.5, flex: 1, minWidth: 140 }}>{f.title}</span>
+                      <button className="btn ghost" style={{ padding: "2px 8px" }} onClick={() => move(f.id, -1)}>▲</button>
+                      <button className="btn ghost" style={{ padding: "2px 8px" }} onClick={() => move(f.id, 1)}>▼</button>
+                    </div>
+                    <input className="key" style={{ width: "100%", letterSpacing: 0, marginTop: 6 }} placeholder="Annotation (ta lecture d'expert — apparaît dans le rapport)" value={f.note} onChange={(e) => upFinding(f.id, { note: e.target.value })} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </Card>
+        <div style={{ height: 12 }} />
       </div>
 
       {!m && <div className="empty">Assemblage du rapport…</div>}
 
+      {/* ================= APERÇU / IMPRESSION ================= */}
       {m && (
         <div className="report-doc">
           {/* ---------- COUVERTURE (Éditorial) ---------- */}
           <div className="rpage rp-cover">
             <div className="r-top">
-              <div className="r-logo">LOGO<br />DP</div>
+              {m.meta.logo ? <img src={m.meta.logo} alt="logo" style={{ width: 46, height: 46, objectFit: "contain", borderRadius: 7 }} /> : <div className="r-logo">LOGO<br />DP</div>}
               <div className="r-mark">DP <span>Cyber</span> Consulting</div>
               <div className="r-conf">Confidentiel</div>
             </div>
@@ -85,17 +179,17 @@ export default function Rapport() {
               <div className="r-verdict">{m.verdict}</div>
             </div>
             <div className="r-kpi">
-              <div><div className="n">{m.kpis.findings ?? 0}</div><div className="t">à traiter</div></div>
-              <div><div className="n">{m.kpis.critiques ?? 0}</div><div className="t">critique(s)</div></div>
+              <div><div className="n">{shown.length}</div><div className="t">à traiter</div></div>
+              <div><div className="n">{shown.filter((f) => f.severity === "crit").length}</div><div className="t">critique(s)</div></div>
               <div><div className="n">{m.kpis.exposes ?? 0}</div><div className="t">ports exposés</div></div>
             </div>
-            <h3>Constats prioritaires</h3>
-            {m.findings.length === 0 && <div className="r-verdict">Aucun constat prioritaire — posture saine sur le périmètre évalué.</div>}
-            {m.findings.length > 0 && (
-              <table className="r-fnd">
-                <tbody>
-                  {m.findings.map((f, i) => (
-                    <tr key={i}>
+            {sec.constats !== false && <>
+              <h3>Constats prioritaires</h3>
+              {shown.length === 0 && <div className="r-verdict">Aucun constat retenu — posture saine sur le périmètre évalué.</div>}
+              {shown.length > 0 && (
+                <table className="r-fnd"><tbody>
+                  {shown.map((f) => (
+                    <tr key={f.id}>
                       <td style={{ width: 70 }}><span className={`r-sev ${f.severity}`}>{f.severity}</span></td>
                       <td>
                         <div className="rt">{f.title}</div>
@@ -108,9 +202,9 @@ export default function Rapport() {
                       </td>
                     </tr>
                   ))}
-                </tbody>
-              </table>
-            )}
+                </tbody></table>
+              )}
+            </>}
             <div className="rp-foot">{m.meta.marque} · {m.meta.confidentialite}</div>
             <div className="rp-lbl">Synthèse</div>
           </div>
@@ -118,28 +212,30 @@ export default function Rapport() {
           {/* ---------- REMÉDIATION + CONFORMITÉ (Cabinet) ---------- */}
           <div className="rpage rp-body">
             <div className="r-top"><div className="r-mark">DP <span>Cyber</span></div><div className="r-ref">{m.meta.reference} · p.3</div></div>
-            <h3>Plan de remédiation</h3>
-            {withRemed.length === 0 && <div className="r-verdict">Aucune action requise.</div>}
-            {withRemed.map((f, i) => (
-              <div className="r-rem" key={i}>
-                <div className="rt"><span className={`r-sev ${f.severity}`} style={{ marginRight: 6 }}>{f.severity}</span>{f.title}</div>
-                <div className="rd">{f.remediation}</div>
-              </div>
-            ))}
-            {m.conformity.length > 0 && (
-              <>
-                <h3>Conformité (référentiels)</h3>
-                {m.conformity.map((c) => (
-                  <div className="r-conf-row" key={c.framework}>
-                    <span style={{ width: 150, fontWeight: 600 }}>{c.label}</span>
-                    <span className="r-conf-bar"><i style={{ width: `${c.score}%` }} /></span>
-                    <span className="mono" style={{ width: 120, textAlign: "right" }}>{c.score}/100 · {c.ecarts} écart(s)</span>
-                  </div>
-                ))}
-              </>
-            )}
-            <h3>Annexe — visuels</h3>
-            <div className="r-shot">[ Emplacement capture — ex. carte du réseau, scan nmap ]</div>
+            {sec.remediation !== false && <>
+              <h3>Plan de remédiation</h3>
+              {withRemed.length === 0 && <div className="r-verdict">Aucune action requise.</div>}
+              {withRemed.map((f) => (
+                <div className="r-rem" key={f.id}>
+                  <div className="rt"><span className={`r-sev ${f.severity}`} style={{ marginRight: 6 }}>{f.severity}</span>{f.title}</div>
+                  <div className="rd">{f.remediation}</div>
+                </div>
+              ))}
+            </>}
+            {sec.conformite !== false && m.conformity.length > 0 && <>
+              <h3>Conformité (référentiels)</h3>
+              {m.conformity.map((c) => (
+                <div className="r-conf-row" key={c.framework}>
+                  <span style={{ width: 150, fontWeight: 600 }}>{c.label}</span>
+                  <span className="r-conf-bar"><i style={{ width: `${c.score}%` }} /></span>
+                  <span className="mono" style={{ width: 120, textAlign: "right" }}>{c.score}/100 · {c.ecarts} écart(s)</span>
+                </div>
+              ))}
+            </>}
+            {sec.annexe !== false && <>
+              <h3>Annexe — visuels</h3>
+              <div className="r-shot">[ Emplacement capture — ex. carte du réseau, scan nmap ]</div>
+            </>}
             <div className="rp-foot">{m.meta.marque} · {m.meta.confidentialite}</div>
             <div className="rp-lbl">Remédiation</div>
           </div>

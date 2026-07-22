@@ -8,7 +8,11 @@ zéro hallucination. L'utilisateur retouche/annote ensuite côté application (P
 """
 from __future__ import annotations
 
+import json
+import os
+import sys
 from datetime import date
+from pathlib import Path
 
 from pydantic import BaseModel
 
@@ -24,9 +28,12 @@ class MissionMeta(BaseModel):
     reference: str = ""
     date: str = ""
     confidentialite: str = "Diffusion restreinte — ne pas redistribuer"
+    logo: str = ""         # data-URL du logo (upload utilisateur, Phase 2)
 
 
 class Finding(BaseModel):
+    id: str = ""           # identifiant stable (édition : masquer/réordonner/annoter)
+    included: bool = True   # inclus dans le rapport final ?
     severity: str          # crit / haut / moyen / faible
     title: str
     description: str = ""   # vulgarisée (le « pourquoi »)
@@ -57,7 +64,13 @@ class ReportModel(BaseModel):
     kpis: dict = {}
     findings: list[Finding] = []
     conformity: list[FrameworkScore] = []
+    sections: dict = {"constats": True, "remediation": True, "conformite": True, "annexe": True}
     generated_at: str = ""
+
+
+def _slug(source: str, title: str) -> str:
+    base = f"{source}:{title}".lower()
+    return "".join(c if c.isalnum() else "-" for c in base)[:64].strip("-")
 
 
 def _sev_from_grc(control_id: str, status: str) -> str:
@@ -148,6 +161,8 @@ def build_model(raw: dict) -> ReportModel:
             ))
 
     findings.sort(key=lambda f: (_SEV_ORDER.get(f.severity, 9), -(f.cvss or 0)))
+    for i, f in enumerate(findings):
+        f.id = f"{_slug(f.source, f.title)}-{i}"
 
     n_crit = sum(1 for f in findings if f.severity == "crit")
     band_label = _BAND_LABEL.get(band, "Exposition faible")
@@ -178,3 +193,37 @@ def build_model(raw: dict) -> ReportModel:
         conformity=conformity,
         generated_at=today.isoformat(),
     )
+
+
+# ── Persistance du brouillon (document vivant, éditable/annotable) ─────────
+def _draft_path() -> Path:
+    """Emplacement du brouillon — robuste au packaging PyInstaller (cf. grc)."""
+    if getattr(sys, "frozen", False):
+        base = os.getenv("LOCALAPPDATA") or os.path.expanduser("~")
+        return Path(base) / "RED-SHIELD" / "report_draft.json"
+    return Path(__file__).resolve().parents[2] / "data" / "report_draft.json"
+
+
+def load_draft() -> dict | None:
+    p = _draft_path()
+    if not p.exists():
+        return None
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else None
+    except Exception:
+        return None
+
+
+def save_draft(model: dict) -> None:
+    p = _draft_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(model, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def clear_draft() -> None:
+    p = _draft_path()
+    try:
+        p.unlink()
+    except Exception:
+        pass

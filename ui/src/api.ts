@@ -98,10 +98,10 @@ export interface GrcControl { id: string; domain: string; title: string; why: st
 export interface GrcScore { framework: string; label: string; score: number; assessed: number; total: number; counts: Record<GrcStatus, number>; }
 export interface GrcPosture { frameworks: Record<string, string>; scores: GrcScore[]; controls: GrcControl[]; summary: { total: number; counts: Record<GrcStatus, number>; a_traiter_ids: string[] }; }
 export type Sev = "crit" | "haut" | "moyen" | "faible";
-export interface ReportMeta { marque: string; consultant: string; client: string; perimetre: string; reference: string; date: string; confidentialite: string; }
-export interface ReportFinding { severity: Sev; title: string; description: string; detail: string; asset: string; remediation: string; refs: Record<string, string>; cve: string; cvss: number | null; source: string; note: string; }
+export interface ReportMeta { marque: string; consultant: string; client: string; perimetre: string; reference: string; date: string; confidentialite: string; logo: string; }
+export interface ReportFinding { id: string; included: boolean; severity: Sev; title: string; description: string; detail: string; asset: string; remediation: string; refs: Record<string, string>; cve: string; cvss: number | null; source: string; note: string; }
 export interface ReportFrameworkScore { framework: string; label: string; score: number; ecarts: number; }
-export interface ReportMission { meta: ReportMeta; score: number; band: string; band_label: string; counts: Record<string, number>; verdict: string; kpis: Record<string, number>; findings: ReportFinding[]; conformity: ReportFrameworkScore[]; generated_at: string; }
+export interface ReportMission { meta: ReportMeta; score: number; band: string; band_label: string; counts: Record<string, number>; verdict: string; kpis: Record<string, number>; findings: ReportFinding[]; conformity: ReportFrameworkScore[]; sections: Record<string, boolean>; generated_at: string; }
 
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(BASE + path);
@@ -196,6 +196,9 @@ export const api = {
   updaterRun: () => post<{ ok: boolean }>("/updater/run", {}),
   updaterUpgrade: (id: string, dry_run: boolean) => post<UpgradeResult>("/updater/upgrade", { id, dry_run }),
   reportMission: (meta?: Partial<ReportMeta>) => post<ReportMission>("/report/mission", { meta: meta || null }),
+  reportDraftGet: () => get<ReportMission | { exists: false }>("/report/draft"),
+  reportDraftSave: (model: ReportMission) => post<{ ok: boolean }>("/report/draft", model),
+  reportDraftClear: async () => { await fetch(BASE + "/report/draft", { method: "DELETE" }); },
   grcPosture: () => get<GrcPosture>("/grc"),
   grcSetControl: (id: string, status: string, note: string) => post<GrcPosture>("/grc/control", { id, status, note }),
   grcExportUrl: BASE + "/grc/export",

@@ -3,6 +3,7 @@ import { api } from "../api";
 import type { Beacon, ConnectorStatus, CrackResult, HidsResult, IntelResult, LanDevice, LlmResult, MailAnalysis, OsintResult, ScanResult, ScoredConnection, Severity, TimelineEvent, TraceResult, WifiNet } from "../api";
 import { BandwidthChart, NetworkGraph, Sparkline, TraceMap } from "../viz";
 import { SEV_META, bandColor, bandLabel, fr, Card, ReputationButton, CutButton, ClosePortButton, Reorderable, Gauge, ConnRow, DualBar, Mtile, PortChips, AiAnalyzeButton } from "../shared";
+import Rapport from "./Rapport";
 
 const GRC_STATUS_META: Record<string, { label: string; color: string; short: string }> = {
   conforme: { label: "Conforme", color: "var(--safe)", short: "CONFORME" },
@@ -50,7 +51,7 @@ function GrcControlEditor({ c, busy, onSet }: { c: import("../api").GrcControl; 
   );
 }
 
-export default function Grc() {
+function Posture() {
   const [post, setPost] = useState<import("../api").GrcPosture | null>(null);
   const [fam, setFam] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
@@ -134,6 +135,19 @@ export default function Grc() {
           </div>
         ))}
       </Card>
+    </>
+  );
+}
+
+export default function Grc() {
+  const [view, setView] = useState<"posture" | "rapport">("posture");
+  return (
+    <>
+      <div className="seg no-print" style={{ marginBottom: 12, width: "fit-content" }}>
+        <button className={view === "posture" ? "on" : ""} onClick={() => setView("posture")}>Posture GRC</button>
+        <button className={view === "rapport" ? "on" : ""} onClick={() => setView("rapport")}>Rapport de mission</button>
+      </div>
+      {view === "posture" ? <Posture /> : <Rapport />}
     </>
   );
 }

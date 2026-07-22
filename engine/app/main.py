@@ -46,6 +46,7 @@ from app.modules.throughput import ThroughputModule
 from app.modules.trace import TraceModule
 from app.modules.wifi import WifiModule
 from app.report.markdown import build_markdown
+from app.report import mission as mission_report
 from app.report.mission import build_model
 
 logging.basicConfig(level=logging.INFO)
@@ -605,6 +606,24 @@ def create_app() -> FastAPI:
         model = build_model(raw)
         _audit("report_mission", f"score={model.score}, findings={len(model.findings)}")
         return model
+
+    @app.get("/report/draft")
+    def report_draft_get():
+        """Brouillon éditable sauvegardé (ou {exists:false})."""
+        draft = mission_report.load_draft()
+        return draft if draft is not None else {"exists": False}
+
+    @app.post("/report/draft")
+    def report_draft_save(model: dict):
+        """Sauvegarde le rapport édité/annoté (document vivant)."""
+        mission_report.save_draft(model)
+        _audit("report_draft", "sauvegardé")
+        return {"ok": True}
+
+    @app.delete("/report/draft")
+    def report_draft_clear():
+        mission_report.clear_draft()
+        return {"ok": True}
 
     return app
 
