@@ -46,6 +46,7 @@ from app.modules.throughput import ThroughputModule
 from app.modules.trace import TraceModule
 from app.modules.wifi import WifiModule
 from app.report.markdown import build_markdown
+from app.report.mission import build_model
 
 logging.basicConfig(level=logging.INFO)
 
@@ -86,6 +87,10 @@ class GrcControlReq(BaseModel):
     id: str
     status: str          # conforme / a_traiter / non_conforme / na / manuel / auto
     note: str = ""
+
+
+class ReportMetaReq(BaseModel):
+    meta: dict | None = None   # override optionnel (client, périmètre, consultant…)
 
 
 def register_modules(registry: Registry, bus: EventBus) -> None:
@@ -567,6 +572,39 @@ def create_app() -> FastAPI:
             build_markdown(summary, scored),
             headers={"Content-Disposition": "attachment; filename=red-report.md"},
         )
+
+    @app.post("/report/mission")
+    def report_mission(req: ReportMetaReq = ReportMetaReq()):
+        """Assemble le rapport de mission à partir des données RÉELLES du poste local."""
+        raw: dict = {"meta": req.meta}
+        scoring = registry.get("scoring")
+        shield = registry.get("shield")
+        if scoring is not None and shield is not None:
+            try:
+                summary = scoring.exposure_summary(scoring.score_connections(shield.get_connections()))
+                raw["exposure"] = summary.model_dump()
+            except Exception:
+                pass
+        if shield is not None:
+            try:
+                raw["exposed_ports"] = shield.metrics(geo=None).listeners_exposed
+            except Exception:
+                pass
+        grc = registry.get("grc")
+        if grc is not None:
+            try:
+                raw["grc"] = grc.posture()
+            except Exception:
+                pass
+        pv = registry.get("procvuln")
+        if pv is not None:
+            try:
+                raw["procvuln"] = pv.get().model_dump()
+            except Exception:
+                pass
+        model = build_model(raw)
+        _audit("report_mission", f"score={model.score}, findings={len(model.findings)}")
+        return model
 
     return app
 

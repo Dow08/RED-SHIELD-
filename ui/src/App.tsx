@@ -15,6 +15,7 @@ import Soc from "./tabs/Soc";
 import Health from "./tabs/Health";
 import Connecteurs from "./tabs/Connecteurs";
 import Diagnostic from "./tabs/Diagnostic";
+import Rapport from "./tabs/Rapport";
 
 const TABS: [string, string, string?][] = [
   ["dashboard", "Dashboard"],
@@ -22,6 +23,7 @@ const TABS: [string, string, string?][] = [
   ["carte", "Carte réseau"],
   ["remediation", "Remédiation"],
   ["conformite", "Conformité"],
+  ["rapport", "Rapport"],
   ["recon", "Recon"],
   ["offensif", "Offensif"],
   ["soc", "SOC local"],
@@ -126,6 +128,7 @@ export default function App() {
       {tab === "carte" && <CarteReseau conns={conns} listeners={listeners.data || []} trace={trace.data} traceLabel={traceLabel} geoPoints={geoPoints.data || null} onRun={runTrace} onSelect={selectEndpoint} />}
       {tab === "remediation" && <Remediation conns={conns} />}
       {tab === "conformite" && <Grc />}
+      {tab === "rapport" && <Rapport />}
       {tab === "recon" && <Recon lan={lan.data} scan={scan.data} procvuln={procvuln.data} onScan={(t, m) => api.scanRun(t, m)} />}
       {tab === "offensif" && <Offensif airgapped={airgapped} wifi={wifi.data} />}
       {tab === "soc" && <Soc hids={hids.data} defender={defender.data} />}

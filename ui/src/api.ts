@@ -97,6 +97,11 @@ export type GrcStatus = "conforme" | "a_traiter" | "non_conforme" | "na" | "manu
 export interface GrcControl { id: string; domain: string; title: string; why: string; refs: Record<string, string>; remediation: string; families: string[]; signal: string | null; status: GrcStatus; finding: string; note: string; source: "auto" | "manuel"; }
 export interface GrcScore { framework: string; label: string; score: number; assessed: number; total: number; counts: Record<GrcStatus, number>; }
 export interface GrcPosture { frameworks: Record<string, string>; scores: GrcScore[]; controls: GrcControl[]; summary: { total: number; counts: Record<GrcStatus, number>; a_traiter_ids: string[] }; }
+export type Sev = "crit" | "haut" | "moyen" | "faible";
+export interface ReportMeta { marque: string; consultant: string; client: string; perimetre: string; reference: string; date: string; confidentialite: string; }
+export interface ReportFinding { severity: Sev; title: string; description: string; detail: string; asset: string; remediation: string; refs: Record<string, string>; cve: string; cvss: number | null; source: string; note: string; }
+export interface ReportFrameworkScore { framework: string; label: string; score: number; ecarts: number; }
+export interface ReportMission { meta: ReportMeta; score: number; band: string; band_label: string; counts: Record<string, number>; verdict: string; kpis: Record<string, number>; findings: ReportFinding[]; conformity: ReportFrameworkScore[]; generated_at: string; }
 
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(BASE + path);
@@ -190,6 +195,7 @@ export const api = {
   updaterList: () => get<UpdaterResult>("/updater/list"),
   updaterRun: () => post<{ ok: boolean }>("/updater/run", {}),
   updaterUpgrade: (id: string, dry_run: boolean) => post<UpgradeResult>("/updater/upgrade", { id, dry_run }),
+  reportMission: (meta?: Partial<ReportMeta>) => post<ReportMission>("/report/mission", { meta: meta || null }),
   grcPosture: () => get<GrcPosture>("/grc"),
   grcSetControl: (id: string, status: string, note: string) => post<GrcPosture>("/grc/control", { id, status, note }),
   grcExportUrl: BASE + "/grc/export",

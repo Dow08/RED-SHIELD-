@@ -85,6 +85,83 @@ a:hover { text-decoration: underline; }
 .navb .mini { font-size: 9.5px; color: var(--faint); margin-left: 5px; }
 
 /* --- cards & bento --- */
+/* ================= RAPPORT DE MISSION (aperçu + impression PDF) ================= *
+ * Papier clair permanent (livrable imprimable). Couverture = Éditorial, pages = Cabinet. */
+.report-doc { display: flex; flex-direction: column; align-items: center; gap: 18px; padding: 8px 0 40px; }
+.rpage { width: 210mm; max-width: 100%; min-height: 297mm; background: #fff; color: #111; position: relative;
+  box-shadow: 0 12px 34px rgba(0,0,0,.30); border-radius: 2px; padding: 20mm 18mm; overflow: hidden;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.rpage .rp-lbl { position: absolute; bottom: 8mm; right: 18mm; font-size: 8px; letter-spacing: .1em;
+  text-transform: uppercase; color: #b9b6ae; }
+.rpage .rp-foot { position: absolute; bottom: 8mm; left: 18mm; font-size: 8px; color: #b9b6ae; letter-spacing: .04em; }
+.r-logo { width: 40px; height: 40px; border: 1px dashed #cfccc4; border-radius: 7px; display: grid; place-items: center;
+  font-size: 8px; color: #b9b6ae; text-align: center; line-height: 1.1; flex: 0 0 auto; }
+.r-sev { display: inline-block; font-size: 9px; font-weight: 700; letter-spacing: .03em; padding: 2px 6px;
+  border-radius: 3px; text-transform: uppercase; }
+.r-sev.crit { background: #fbe6e6; color: #a11d24; } .r-sev.haut { background: #fbeed9; color: #9a5c11; }
+.r-sev.moyen { background: #fdf6da; color: #8a6d12; } .r-sev.faible { background: #e4f2ea; color: #1f6a44; }
+.r-ring { --v: 62; --rc: #b7791f; width: 92px; height: 92px; border-radius: 50%; flex: 0 0 auto;
+  background: conic-gradient(var(--rc) calc(var(--v) * 1%), #ececE6 0); display: grid; place-items: center; }
+.r-ring::after { content: ""; width: 68px; height: 68px; border-radius: 50%; background: #fff; grid-area: 1/1; }
+.r-ring b { grid-area: 1/1; z-index: 1; font-size: 26px; font-weight: 800; color: #222; }
+.r-shot { border: 1px dashed #cfccc4; border-radius: 5px; color: #b0ada4; font-size: 11px; display: grid;
+  place-items: center; min-height: 90px; margin-top: 12px;
+  background: repeating-linear-gradient(45deg, #faf9f6, #faf9f6 8px, #f3f1ec 8px, #f3f1ec 16px); }
+
+/* --- Couverture ÉDITORIALE --- */
+.rp-cover { background: #fcfbf9; color: #171512; }
+.rp-cover .r-top { display: flex; align-items: center; gap: 10px; }
+.rp-cover .r-mark { font-weight: 900; text-transform: uppercase; font-size: 15px; letter-spacing: -.01em; }
+.rp-cover .r-mark span { color: #e8620e; }
+.rp-cover .r-conf { margin-left: auto; font-size: 9px; letter-spacing: .12em; text-transform: uppercase; color: #a11d24; }
+.rp-cover .r-hero { margin-top: 14px; border-radius: 8px; overflow: hidden; background: #12100e; height: 150px; }
+.rp-cover .r-title { font-weight: 900; font-size: 52px; line-height: .96; letter-spacing: -.02em; text-transform: uppercase;
+  margin: 28px 0 0; text-wrap: balance; }
+.rp-cover .r-title em { font-style: normal; color: #e8620e; }
+.rp-cover .r-sub { font-family: Georgia, serif; font-style: italic; font-size: 16px; color: #5a544e; margin-top: 12px; }
+.rp-cover .r-big { display: flex; align-items: flex-end; gap: 14px; margin-top: 60px; }
+.rp-cover .r-big .v { font-weight: 900; font-size: 92px; line-height: .8; letter-spacing: -.03em; color: #e8620e; }
+.rp-cover .r-big .x { font-size: 14px; color: #8a857e; line-height: 1.5; }
+.rp-cover .r-meta { margin-top: 26px; border-top: 2px solid #171512; padding-top: 12px; display: grid;
+  grid-template-columns: 1fr 1fr; gap: 4px 24px; font-size: 12px; color: #4a4640; }
+.rp-cover .r-meta div { display: flex; justify-content: space-between; }
+.rp-cover .r-meta b { color: #171512; }
+
+/* --- Pages intérieures CABINET --- */
+.rp-body { background: #fbfaf7; color: #10203a; }
+.rp-body .r-top { display: flex; align-items: center; gap: 8px; border-bottom: 2px solid #10203a; padding-bottom: 8px; }
+.rp-body .r-mark { font-weight: 800; font-size: 13px; } .rp-body .r-mark span { color: #12507e; }
+.rp-body .r-ref { margin-left: auto; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: #8a877f; }
+.rp-body .r-eyebrow { font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: #12507e; font-weight: 700; margin-top: 18px; }
+.rp-body h3 { font-family: Georgia, serif; font-size: 17px; margin: 20px 0 10px; }
+.rp-body .r-syn { display: flex; gap: 18px; align-items: center; margin-top: 10px; }
+.rp-body .r-verdict { font-size: 13px; color: #33322f; line-height: 1.55; }
+.rp-body .r-kpi { display: flex; gap: 12px; margin: 16px 0; }
+.rp-body .r-kpi div { flex: 1; border: 1px solid #dad9d1; border-radius: 7px; padding: 10px 12px; }
+.rp-body .r-kpi .n { font-family: Georgia, serif; font-size: 26px; font-weight: 700; }
+.rp-body .r-kpi .t { font-size: 9px; text-transform: uppercase; letter-spacing: .06em; color: #8a877f; }
+.rp-body table.r-fnd { width: 100%; border-collapse: collapse; }
+.rp-body table.r-fnd td { font-size: 12px; padding: 7px 4px; border-bottom: 1px solid #ececE6; vertical-align: top; }
+.rp-body table.r-fnd .rt { font-weight: 600; } .rp-body table.r-fnd .rd { color: #55524c; font-size: 11px; }
+.rp-body table.r-fnd .mono { font-family: ui-monospace, Consolas, monospace; color: #8a877f; font-size: 10px; }
+.rp-body .r-rem { border-left: 3px solid #12507e; padding: 4px 0 4px 12px; margin: 10px 0; }
+.rp-body .r-rem .rt { font-weight: 600; font-size: 12px; } .rp-body .r-rem .rd { font-size: 11px; color: #55524c; }
+.rp-body .r-conf-row { display: flex; align-items: center; gap: 10px; font-size: 12px; padding: 7px 0; border-bottom: 1px solid #ececE6; }
+.rp-body .r-conf-bar { flex: 1; height: 7px; background: #ececE6; border-radius: 4px; overflow: hidden; }
+.rp-body .r-conf-bar i { display: block; height: 100%; background: #12507e; }
+.rp-body .r-annot { border: 1px solid #e5e3db; background: #fbf7ef; border-radius: 5px; padding: 6px 9px; margin-top: 6px;
+  font-size: 11px; color: #6b5a2f; } .rp-body .r-annot b { color: #8a6d12; }
+
+/* --- Impression : on isole le rapport, format A4 --- */
+@media print {
+  body * { visibility: hidden !important; }
+  .report-doc, .report-doc * { visibility: visible !important; }
+  .report-doc { position: absolute; inset: 0; margin: 0; padding: 0; gap: 0; display: block; }
+  .rpage { box-shadow: none; border-radius: 0; margin: 0; width: 100%; min-height: 100vh; page-break-after: always; }
+  .no-print { display: none !important; }
+  @page { size: A4; margin: 0; }
+}
+
 /* Colonne principale extensible (minmax 0 évite le débordement) + rail droit rétractable.
    Passage en 1 colonne assez tôt pour que le rail ne soit jamais comprimé (plus de superposition). */
 .grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 340px); gap: 12px; align-items: start; }
