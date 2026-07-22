@@ -10,7 +10,7 @@ Une vision d'ensemble de ma machine en temps réel, et des briques que j'active 
 
 [![Licence : PolyForm Noncommercial](https://img.shields.io/badge/licence-PolyForm%20Noncommercial%201.0.0-orange)](LICENSE)
 [![Sécurité : Trivy](https://img.shields.io/badge/s%C3%A9curit%C3%A9-Trivy%20CI-blue)](.github/workflows/trivy.yml)
-![Tests](https://img.shields.io/badge/tests-93%20pytest%20%2B%207%20vitest-brightgreen)
+![Tests](https://img.shields.io/badge/tests-102%20pytest%20%2B%207%20vitest-brightgreen)
 ![Backend](https://img.shields.io/badge/backend-Python%203.11%2B%20·%20FastAPI-3776AB)
 ![Frontend](https://img.shields.io/badge/frontend-React%2018%20·%20Vite%20·%20Tailwind-61DAFB)
 ![Desktop](https://img.shields.io/badge/desktop-Tauri%20v2-24C8DB)
@@ -47,6 +47,7 @@ Le résultat, c'est **RED SHIELD** : un **bouclier réseau modulaire**, pensé c
   - [Reconnaissance & offensif](#-reconnaissance--offensif-red-team)
   - [SOC local & remédiation](#-soc-local--remédiation)
   - [Conformité — assistant CISO (GRC)](#-conformité--assistant-ciso-grc)
+  - [Rapport de mission (PDF)](#-rapport-de-mission-livrable-pdf)
   - [Santé du poste](#-santé-du-poste)
   - [Connecteurs, IA & extensibilité](#-connecteurs-ia--extensibilité)
   - [Moteur mobile autonome](#-moteur-mobile-autonome)
@@ -95,6 +96,7 @@ _Thème « Command Grid », données réelles (rien d'inventé). Air-gapped acti
 ### 🎯 Reconnaissance & offensif (red team)
 
 - **Scan nmap** enrichi : **croisement CVE en ligne (API NVD)**, **décomposition par couche OSI**, mapping **conformité CIS / ANSSI / NIST** par port, et **suggestions d'énumération**.
+- **Garde-fou de périmètre** : déclare la ou les **cibles autorisées** ; scanner hors périmètre demande une confirmation et est **journalisé** dans la piste d'audit (traçabilité de mission).
 - **Vulnérabilités des applications** installées : versions des process croisées avec les **CVE NVD** en direct.
 - **Audit WiFi** (`netsh` sous Windows) : réseaux, chiffrement, canaux, évaluation du risque — l'alternative légère à aircrack là où je n'ai pas besoin d'injection.
 - **Cracker de hash** : **md5 / sha1 / sha256 / sha512 / PBKDF2**, identification automatique du type, attaque par dictionnaire — pur, local, sans dépendance.
@@ -111,9 +113,18 @@ _Thème « Command Grid », données réelles (rien d'inventé). Air-gapped acti
 ### 📋 Conformité — assistant CISO (GRC)
 
 - Un **vrai suivi de conformité**, pas une auto-déclaration : **16 contrôles** classés par domaine et mappés à **ISO/IEC 27001:2022**, **NIST CSF 2.0** et **CIS Controls v8**, chacun avec un **« pourquoi »** et une **recommandation** en clair.
-- **Contrôles techniques auto-évalués** depuis l'état réel de la machine (ports exposés, flux en clair, antivirus/EDR, correctifs en attente, connexions suspectes, journalisation, surveillance).
-- **Contrôles organisationnels** (MFA, gestion des accès, sauvegardes, réponse à incident, sensibilisation, RGPD, fournisseurs…) **évaluables manuellement avec preuve**, persistée localement et réversible.
-- **Score pondéré par référentiel** + global, statuts *conforme / à traiter / non conforme / N-A / à évaluer*, et **export Markdown** en rapport d'audit. Tourne **en air-gapped**, zéro envoi externe.
+- **Contrôles techniques auto-évalués** depuis l'état réel de la machine (ports exposés, flux en clair, antivirus/EDR, correctifs en attente, connexions suspectes, journalisation) — le verdict calculé fait foi.
+- **Contrôles organisationnels** (MFA, accès, sauvegardes, réponse à incident, sensibilisation, RGPD, fournisseurs…) **à évaluer soi-même** avec **preuve** : justification texte **+ pièces jointes** (capture, PDF, ticket — compressées automatiquement). La preuve est indépendante du statut et persiste localement.
+- **Score pondéré par référentiel** + global, statuts *conforme / à traiter / non conforme / N-A / à évaluer*, et **export Markdown**. Tourne **en air-gapped**, zéro envoi externe.
+
+### 📄 Rapport de mission (livrable PDF)
+
+Le générateur de rapport de consulting, intégré à l'onglet Conformité :
+
+- **Assemblage factuel** en un clic depuis les **données réelles** (score d'exposition, constats issus du GRC + CVE, conformité) — rien d'inventé, une section vide est masquée.
+- **Document vivant, éditable directement** : tu cliques dans l'aperçu pour réécrire **n'importe quel texte** (titres compris), avec **mise en forme riche** (gras, italique, listes), tu **annotes** chaque constat, tu **masques/réordonnes**, tu ajoutes des **sections libres** (intro, contexte, conclusion) et des **captures**.
+- **Marque personnalisable** (nom, logo, référence d'autorisation), **synthèse assistée par IA** optionnelle (éditable), **brouillon sauvegardé** pour reprendre plus tard.
+- **Export PDF** propre (couverture éditoriale + intérieur sobre, format A4) via l'impression navigateur.
 
 ### 🩺 Santé du poste
 
@@ -229,7 +240,7 @@ Onglet **Actions** → choisir le workflow → **Run workflow** → l'artefact (
 
 ```bash
 # Backend
-cd engine && .venv/Scripts/python.exe -m pytest -q      # 93 tests
+cd engine && .venv/Scripts/python.exe -m pytest -q      # 102 tests
 
 # Frontend
 cd ui && npx vitest run                                  # 7 tests
