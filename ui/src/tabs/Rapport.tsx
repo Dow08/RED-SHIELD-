@@ -6,14 +6,47 @@ import { toAttachment } from "../lib/img";
 
 const RING = (band: string) => (band === "critique" ? "#b4232a" : band === "elevee" ? "#b7791f" : "#2f7d4f");
 
-/** Zone éditable directement sur le document (contentEditable robuste : commit au blur, pas de saut de curseur). */
-function Editable({ value, onCommit, ph, className, style }: { value: string; onCommit: (v: string) => void; ph?: string; className?: string; style?: React.CSSProperties }) {
+// Nettoyage du HTML riche : liste blanche de balises, pas d'attributs (ni style/on*/script).
+const _ALLOWED = new Set(["B", "STRONG", "I", "EM", "U", "UL", "OL", "LI", "BR", "P", "DIV", "SPAN"]);
+function sanitizeHtml(html: string): string {
+  const tpl = document.createElement("template");
+  tpl.innerHTML = html;
+  const walk = (node: ParentNode) => {
+    Array.from(node.children).forEach((el) => {
+      if (!_ALLOWED.has(el.tagName)) { el.replaceWith(...Array.from(el.childNodes)); return; }
+      Array.from(el.attributes).forEach((a) => el.removeAttribute(a.name));
+      walk(el);
+    });
+  };
+  walk(tpl.content);
+  return tpl.innerHTML.trim();
+}
+
+/** Zone éditable directement sur le document. `rich` : gras/italique/listes (innerHTML sanitizé) ; sinon texte brut. */
+function Editable({ value, onCommit, ph, className, style, rich }: { value: string; onCommit: (v: string) => void; ph?: string; className?: string; style?: React.CSSProperties; rich?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => { if (ref.current && ref.current.textContent !== value) ref.current.textContent = value; }, [value]);
+  useEffect(() => {
+    const el = ref.current; if (!el) return;
+    const cur = rich ? el.innerHTML : el.textContent;
+    if (cur !== value) { if (rich) el.innerHTML = value; else el.textContent = value; }
+  }, [value, rich]);
   return (
     <div ref={ref} contentEditable suppressContentEditableWarning
       className={`r-edit ${className || ""}`} style={style} data-ph={ph} title="Cliquer pour éditer"
-      onBlur={(e) => { const t = e.currentTarget.textContent || ""; if (t !== value) onCommit(t); }} />
+      onBlur={(e) => { const t = rich ? sanitizeHtml(e.currentTarget.innerHTML) : (e.currentTarget.textContent || ""); if (t !== value) onCommit(t); }} />
+  );
+}
+
+/** Petite barre de format agissant sur la zone éditable focalisée (execCommand sur la sélection). */
+function FormatBar() {
+  const cmd = (c: string) => (e: React.MouseEvent) => { e.preventDefault(); document.execCommand(c); };
+  return (
+    <span style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
+      <span className="muted" style={{ fontSize: 11 }}>Format :</span>
+      <button className="btn ghost" style={{ padding: "2px 8px", fontWeight: 800 }} onMouseDown={cmd("bold")} title="Gras (sélectionne du texte)">G</button>
+      <button className="btn ghost" style={{ padding: "2px 8px", fontStyle: "italic" }} onMouseDown={cmd("italic")} title="Italique">I</button>
+      <button className="btn ghost" style={{ padding: "2px 8px" }} onMouseDown={cmd("insertUnorderedList")} title="Liste à puces">• Liste</button>
+    </span>
   );
 }
 const SEVS: Sev[] = ["crit", "haut", "moyen", "faible"];
@@ -113,7 +146,8 @@ export default function Rapport() {
             <button className="btn" disabled={!m} onClick={() => window.print()}>⬇ Générer le PDF</button>
           </span>
         }>
-          <div className="note">Document <b>vivant</b> : les faits viennent des <b>données réelles</b> (rien d'inventé). ✏️ <b>Clique directement dans l'aperçu</b> (verdict, annotation d'un constat, remédiation) pour l'éditer sur le document ; le panneau ci-dessous gère le structurel (client, ordre, masquage, marque/logo). Pense à <b>Enregistrer</b>.</div>
+          <div className="note">Document <b>vivant</b> : les faits viennent des <b>données réelles</b> (rien d'inventé). ✏️ <b>Clique directement dans l'aperçu</b> pour éditer n'importe quel texte (titres compris) ; sélectionne du texte puis utilise la barre <b>Format</b> pour gras/italique/listes. Le panneau ci-dessous gère le structurel. Pense à <b>Enregistrer</b>.</div>
+          <div style={{ padding: "0 16px 8px" }}><FormatBar /></div>
 
           {showEditor && m && (
             <div style={{ padding: "4px 16px 14px", display: "flex", flexDirection: "column", gap: 12 }}>
@@ -238,7 +272,7 @@ export default function Rapport() {
             <div className="r-eyebrow">Synthèse pour la direction</div>
             <div className="r-syn">
               <div className="r-ring" style={{ ["--v" as any]: m.score, ["--rc" as any]: RING(m.band) }}><b>{m.score}</b></div>
-              <Editable className="r-verdict" value={m.verdict} ph="Rédige la synthèse…" onCommit={(v) => setModel((mm) => mm && { ...mm, verdict: v })} />
+              <Editable rich className="r-verdict" value={m.verdict} ph="Rédige la synthèse…" onCommit={(v) => setModel((mm) => mm && { ...mm, verdict: v })} />
             </div>
             <div className="r-kpi">
               <div><div className="n">{shown.length}</div><div className="t">à traiter</div></div>
@@ -256,7 +290,7 @@ export default function Rapport() {
                       <td>
                         <Editable className="rt" value={f.title} ph="Titre du constat" onCommit={(v) => upFinding(f.id, { title: v })} />
                         <Editable className="rd" value={f.detail || f.description} ph="Détail du constat…" onCommit={(v) => upFinding(f.id, { detail: v })} />
-                        <Editable className="r-annot" value={f.note} ph="✏️ annoter ce constat…" onCommit={(v) => upFinding(f.id, { note: v })} />
+                        <Editable rich className="r-annot" value={f.note} ph="✏️ annoter ce constat…" onCommit={(v) => upFinding(f.id, { note: v })} />
                       </td>
                       <td className="mono" style={{ width: 90, textAlign: "right" }}>
                         {f.cve || [f.refs.ISO, f.refs.NIST, f.refs.CIS].filter(Boolean)[0] || ""}
@@ -280,7 +314,7 @@ export default function Rapport() {
               {withRemed.map((f) => (
                 <div className="r-rem" key={f.id}>
                   <div className="rt"><span className={`r-sev ${f.severity}`} style={{ marginRight: 6 }}>{f.severity}</span>{f.title}</div>
-                  <Editable className="rd" value={f.remediation} ph="Remédiation…" onCommit={(v) => upFinding(f.id, { remediation: v })} />
+                  <Editable rich className="rd" value={f.remediation} ph="Remédiation…" onCommit={(v) => upFinding(f.id, { remediation: v })} />
                 </div>
               ))}
             </>}

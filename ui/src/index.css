@@ -157,6 +157,9 @@ a:hover { text-decoration: underline; }
 .r-edit:hover { background: rgba(201, 162, 39, .10); box-shadow: 0 0 0 1px rgba(201, 162, 39, .45); cursor: text; }
 .r-edit:focus { background: rgba(47, 122, 140, .08); box-shadow: 0 0 0 1.5px rgba(18, 80, 126, .55); }
 .r-edit:empty::before { content: attr(data-ph); color: #bdb9b0; font-style: italic; }
+.r-edit ul, .r-edit ol { margin: 4px 0; padding-left: 18px; }
+.r-edit li { margin: 1px 0; }
+.r-edit b, .r-edit strong { font-weight: 700; }
 .rp-body .r-annot.r-edit:empty { border: 1px dashed #e0ddd4; background: transparent; }
 
 /* --- Impression : on isole le rapport, format A4 --- */
