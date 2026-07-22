@@ -367,7 +367,9 @@ def create_app() -> FastAPI:
         if module is None:
             raise HTTPException(status_code=503, detail="module scan indisponible")
         result = module.run_async(req.target, req.mode)
-        _audit("scan", f"{req.target} ({req.mode})", when=bool(result.get("ok")))
+        action = "scan_hors_perimetre" if req.bypass else "scan"
+        detail = f"{req.target} ({req.mode})" + (" — HORS PÉRIMÈTRE (bypass)" if req.bypass else "")
+        _audit(action, detail, when=bool(result.get("ok")))
         return result
 
     @app.get("/procvuln")

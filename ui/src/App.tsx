@@ -126,7 +126,7 @@ export default function App() {
       {tab === "carte" && <CarteReseau conns={conns} listeners={listeners.data || []} trace={trace.data} traceLabel={traceLabel} geoPoints={geoPoints.data || null} onRun={runTrace} onSelect={selectEndpoint} />}
       {tab === "remediation" && <Remediation conns={conns} />}
       {tab === "conformite" && <Grc />}
-      {tab === "recon" && <Recon lan={lan.data} scan={scan.data} procvuln={procvuln.data} onScan={(t, m) => api.scanRun(t, m)} />}
+      {tab === "recon" && <Recon lan={lan.data} scan={scan.data} procvuln={procvuln.data} onScan={(t, m, b) => api.scanRun(t, m, b)} />}
       {tab === "offensif" && <Offensif airgapped={airgapped} wifi={wifi.data} />}
       {tab === "soc" && <Soc hids={hids.data} defender={defender.data} />}
       {tab === "sante" && <Health report={healthRep.data} updater={updater.data} />}

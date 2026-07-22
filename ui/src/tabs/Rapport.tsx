@@ -66,6 +66,14 @@ export default function Rapport() {
     const f = e.target.files?.[0]; if (!f) return;
     const r = new FileReader(); r.onload = () => upMeta({ logo: String(r.result) }); r.readAsDataURL(f);
   };
+  const addAnnexes = (files: FileList | null) => {
+    if (!files) return;
+    Array.from(files).slice(0, 12).forEach((f) => {
+      const r = new FileReader();
+      r.onload = () => setModel((mm) => mm && { ...mm, annexes: [...(mm.annexes || []), { name: f.name, type: f.type, data: String(r.result) }] });
+      r.readAsDataURL(f);
+    });
+  };
 
   const m = model;
   const shown = (m?.findings || []).filter((f) => f.included);
@@ -95,8 +103,27 @@ export default function Rapport() {
                 <input className="key" style={{ letterSpacing: 0, width: 220 }} placeholder="Périmètre" value={m.meta.perimetre} onChange={(e) => upMeta({ perimetre: e.target.value })} />
                 <input className="key" style={{ letterSpacing: 0, width: 150 }} placeholder="Consultant" value={m.meta.consultant} onChange={(e) => upMeta({ consultant: e.target.value })} />
                 <input className="key" style={{ letterSpacing: 0, width: 140 }} placeholder="Référence" value={m.meta.reference} onChange={(e) => upMeta({ reference: e.target.value })} />
+                <input className="key" style={{ letterSpacing: 0, width: 230 }} placeholder="Réf. autorisation (mandat, ordre de mission…)" value={m.meta.autorisation} onChange={(e) => upMeta({ autorisation: e.target.value })} />
                 <label className="btn ghost" style={{ cursor: "pointer" }}>{m.meta.logo ? "Logo ✓" : "Logo…"}<input type="file" accept="image/*" onChange={onLogo} style={{ display: "none" }} /></label>
                 {m.meta.logo && <button className="btn ghost" style={{ padding: "4px 9px" }} onClick={() => upMeta({ logo: "" })}>✕</button>}
+              </div>
+
+              {/* annexes / captures */}
+              <div>
+                <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>Captures / annexes (jointes au rapport)</div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                  <label className="btn ghost" style={{ cursor: "pointer", padding: "4px 10px", fontSize: 11 }}>📎 Ajouter des captures
+                    <input type="file" multiple accept="image/*" onChange={(e) => addAnnexes(e.target.files)} style={{ display: "none" }} />
+                  </label>
+                  {(m.annexes || []).length === 0 && <span className="muted" style={{ fontSize: 11 }}>aucune capture</span>}
+                  {(m.annexes || []).map((a, i) => (
+                    <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 5, border: "1px solid var(--card-b)", borderRadius: 6, padding: "3px 6px", fontSize: 11, background: "var(--card-solid)" }}>
+                      <img src={a.data} alt="" style={{ width: 26, height: 26, objectFit: "cover", borderRadius: 3 }} />
+                      <span style={{ maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</span>
+                      <button className="btn ghost" style={{ padding: "0 5px" }} onClick={() => setModel((mm) => mm && { ...mm, annexes: mm.annexes.filter((_, j) => j !== i) })}>✕</button>
+                    </span>
+                  ))}
+                </div>
               </div>
 
               {/* sections */}
@@ -176,7 +203,7 @@ export default function Rapport() {
               <div><span>Périmètre</span><b>{m.meta.perimetre}</b></div>
               <div><span>Date</span><b>{m.meta.date}</b></div>
               <div><span>Consultant</span><b>{m.meta.consultant}</b></div>
-              <div><span>Diffusion</span><b>Restreinte</b></div>
+              <div><span>Autorisation</span><b>{m.meta.autorisation || "—"}</b></div>
             </div>
             <div className="rp-lbl">Couverture</div>
           </div>
@@ -245,7 +272,16 @@ export default function Rapport() {
             </>}
             {sec.annexe !== false && <>
               <h3>Annexe — visuels</h3>
-              <div className="r-shot">[ Emplacement capture — ex. carte du réseau, scan nmap ]</div>
+              {(m.annexes || []).length === 0
+                ? <div className="r-shot">[ Ajoute des captures via l'éditeur — carte du réseau, scan nmap, preuve… ]</div>
+                : <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {m.annexes.map((a, i) => (
+                      <figure key={i} style={{ margin: 0 }}>
+                        <img src={a.data} alt={a.name} style={{ width: "100%", border: "1px solid #e5e3db", borderRadius: 4 }} />
+                        <figcaption style={{ fontSize: 10, color: "#8a877f", marginTop: 3 }}>{a.name}</figcaption>
+                      </figure>
+                    ))}
+                  </div>}
             </>}
             <div className="rp-foot">{m.meta.marque} · {m.meta.confidentialite}</div>
             <div className="rp-lbl">Remédiation</div>

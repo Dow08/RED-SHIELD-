@@ -125,6 +125,7 @@ class ScanResult(BaseModel):
 class ScanRequest(BaseModel):
     target: str
     mode: str = "discret"
+    bypass: bool = False   # scan lancé HORS du périmètre de mission déclaré (journalisé)
 
 
 class ScanModule(Module):

@@ -23,7 +23,7 @@ function ScanAiButton({ scan }: { scan: ScanResult }) {
 }
 
 /* ============ RECON ============ */
-export default function Recon({ lan, scan, procvuln, onScan }: { lan: LanDevice[] | null; scan: ScanResult | null; procvuln: import("../api").ProcVulnResult | null; onScan: (t: string, m: string) => void }) {
+export default function Recon({ lan, scan, procvuln, onScan }: { lan: LanDevice[] | null; scan: ScanResult | null; procvuln: import("../api").ProcVulnResult | null; onScan: (t: string, m: string, bypass?: boolean) => void }) {
   const devices = lan || [];
   const pv = procvuln;
   const withCve = (pv?.apps || []).filter((a) => a.cves.length > 0);
@@ -31,6 +31,20 @@ export default function Recon({ lan, scan, procvuln, onScan }: { lan: LanDevice[
   const [target, setTarget] = useState("scanme.nmap.org");
   const [mode, setMode] = useState("discret");
   const [help, setHelp] = useState("");
+  const [perimeter, setPerimeter] = useState(() => { try { return localStorage.getItem("rs.mission.perimeter") || ""; } catch { return ""; } });
+  const savePerimeter = (v: string) => { setPerimeter(v); try { localStorage.setItem("rs.mission.perimeter", v); } catch { /* */ } };
+  const inScope = (t: string) => {
+    const p = perimeter.trim(); if (!p) return true;   // pas de périmètre déclaré → pas de garde-fou
+    return p.split(/[\s,;]+/).filter(Boolean).some((s) => t === s || t.includes(s) || s.includes(t));
+  };
+  const launch = () => {
+    if (!inScope(target)) {
+      if (!window.confirm(`⚠️ Cible HORS du périmètre de mission déclaré :\n\n${target}\n\nPérimètre autorisé : ${perimeter}\n\nLancer quand même ? L'action sera JOURNALISÉE dans la piste d'audit.`)) return;
+      onScan(target, mode, true);
+    } else {
+      onScan(target, mode, false);
+    }
+  };
   const PRESETS = [
     { label: "Ma machine", target: "127.0.0.1", mode: "discret", help: "Scanne ta propre machine (services en écoute). Sans risque, toujours autorisé — idéal pour un premier test." },
     { label: "Réseau local /24", target: "192.168.1.0/24", mode: "discret", help: "Balaye ton sous-réseau local (top 100 ports) pour découvrir les hôtes et services exposés." },
@@ -42,13 +56,18 @@ export default function Recon({ lan, scan, procvuln, onScan }: { lan: LanDevice[
       <div className="col">
         <Card title="Scan hôte (nmap + CVE)" right={scan && scan.nmap_available === false ? "nmap absent" : "prêt"}>
           <div className="note">Cibles <b>autorisées uniquement</b> (propriété ou autorisation écrite). Chaque service détecté est croisé avec <b>NVD en ligne</b> (source officielle, à jour) → lien NVD. Nécessite <b>air-gapped OFF</b>.</div>
+          <div className="toolbar" style={{ flexWrap: "wrap" }}>
+            <span className="lbl" title="Cible(s) autorisée(s) : IP/CIDR/hôtes séparés par des espaces. Vide = pas de garde-fou.">🎯 Périmètre</span>
+            <input className="key" style={{ letterSpacing: 0, width: 260 }} value={perimeter} onChange={(e) => savePerimeter(e.target.value)} placeholder="Cible(s) autorisée(s) — ex. 192.168.1.0/24 scanme.nmap.org" />
+            <span className="muted" style={{ fontSize: 11 }}>{perimeter.trim() ? (inScope(target) ? "✅ cible dans le périmètre" : "⚠️ cible hors périmètre") : "aucun garde-fou"}</span>
+          </div>
           <div className="toolbar">
             <input className="key" style={{ letterSpacing: 0, width: 220 }} value={target} onChange={(e) => setTarget(e.target.value)} placeholder="IP / CIDR / hôte" />
             <span className="seg">
               <button className={mode === "discret" ? "on" : ""} onClick={() => setMode("discret")}>Discret</button>
               <button className={mode === "complet" ? "on" : ""} onClick={() => setMode("complet")}>Complet</button>
             </span>
-            <button className="btn" disabled={!target || scan?.running || scan?.nmap_available === false} onClick={() => onScan(target, mode)}>{scan?.running ? "Scan en cours…" : "Lancer le scan"}</button>
+            <button className="btn" disabled={!target || scan?.running || scan?.nmap_available === false} onClick={launch}>{scan?.running ? "Scan en cours…" : "Lancer le scan"}</button>
           </div>
           <div style={{ padding: "0 14px 8px", display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
             <span className="lbl">Presets</span>

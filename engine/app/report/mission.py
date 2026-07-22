@@ -29,6 +29,7 @@ class MissionMeta(BaseModel):
     date: str = ""
     confidentialite: str = "Diffusion restreinte — ne pas redistribuer"
     logo: str = ""         # data-URL du logo (upload utilisateur, Phase 2)
+    autorisation: str = ""  # référence de l'autorisation écrite (périmètre de mission)
 
 
 class Finding(BaseModel):
@@ -64,6 +65,7 @@ class ReportModel(BaseModel):
     kpis: dict = {}
     findings: list[Finding] = []
     conformity: list[FrameworkScore] = []
+    annexes: list = []      # captures jointes : [{name, type, data(data-URL)}] (Phase 3)
     sections: dict = {"constats": True, "remediation": True, "conformite": True, "annexe": True}
     generated_at: str = ""
 

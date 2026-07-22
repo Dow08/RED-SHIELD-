@@ -99,10 +99,10 @@ export interface GrcControl { id: string; domain: string; title: string; why: st
 export interface GrcScore { framework: string; label: string; score: number; assessed: number; total: number; counts: Record<GrcStatus, number>; }
 export interface GrcPosture { frameworks: Record<string, string>; scores: GrcScore[]; controls: GrcControl[]; summary: { total: number; counts: Record<GrcStatus, number>; a_traiter_ids: string[] }; }
 export type Sev = "crit" | "haut" | "moyen" | "faible";
-export interface ReportMeta { marque: string; consultant: string; client: string; perimetre: string; reference: string; date: string; confidentialite: string; logo: string; }
+export interface ReportMeta { marque: string; consultant: string; client: string; perimetre: string; reference: string; date: string; confidentialite: string; logo: string; autorisation: string; }
 export interface ReportFinding { id: string; included: boolean; severity: Sev; title: string; description: string; detail: string; asset: string; remediation: string; refs: Record<string, string>; cve: string; cvss: number | null; source: string; note: string; }
 export interface ReportFrameworkScore { framework: string; label: string; score: number; ecarts: number; }
-export interface ReportMission { meta: ReportMeta; score: number; band: string; band_label: string; counts: Record<string, number>; verdict: string; kpis: Record<string, number>; findings: ReportFinding[]; conformity: ReportFrameworkScore[]; sections: Record<string, boolean>; generated_at: string; }
+export interface ReportMission { meta: ReportMeta; score: number; band: string; band_label: string; counts: Record<string, number>; verdict: string; kpis: Record<string, number>; findings: ReportFinding[]; conformity: ReportFrameworkScore[]; annexes: Attachment[]; sections: Record<string, boolean>; generated_at: string; }
 
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(BASE + path);
@@ -149,7 +149,7 @@ export const api = {
   firewallUnblockPort: (port: number, protocol: string) => post<FwResult>("/firewall/unblock-port", { port, protocol, dry_run: false }),
   firewallRules: () => get<string[]>("/firewall/rules"),
   scan: () => get<ScanResult>("/scan"),
-  scanRun: (target: string, mode: string) => post<{ ok: boolean; error?: string }>("/scan/run", { target, mode }),
+  scanRun: (target: string, mode: string, bypass = false) => post<{ ok: boolean; error?: string }>("/scan/run", { target, mode, bypass }),
   procvuln: () => get<ProcVulnResult>("/procvuln"),
   procvulnRun: () => post<{ ok: boolean; error?: string }>("/procvuln/run", {}),
   hids: () => get<HidsResult>("/hids"),
