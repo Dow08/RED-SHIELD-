@@ -34,6 +34,7 @@ from app.modules.hids import HidsModule
 from app.modules.imapmail import ImapMailModule
 from app.modules.lan import LanModule
 from app.modules.mail import MailModule, MailRequest
+from app.modules.netrecon import NetreconModule
 from app.modules.diagnostic import DiagnosticModule
 from app.modules.persistence import PersistenceModule
 from app.modules.procvuln import ProcVulnModule
@@ -116,6 +117,7 @@ def register_modules(registry: Registry, bus: EventBus) -> None:
     registry.register(HealthModule(bus))
     registry.register(UpdaterModule(bus))
     registry.register(ScanModule(bus))
+    registry.register(NetreconModule(bus))
     registry.register(ProcVulnModule(bus))
     registry.register(HidsModule(bus))
     registry.register(DefenderModule(bus))
@@ -371,6 +373,41 @@ def create_app() -> FastAPI:
         detail = f"{req.target} ({req.mode})" + (" — HORS PÉRIMÈTRE (bypass)" if req.bypass else "")
         _audit(action, detail, when=bool(result.get("ok")))
         return result
+
+    @app.get("/netrecon/discover")
+    def netrecon_discover(cidr: str, bypass: bool = False):
+        """Cartographie native (sans nmap) : hôtes vivants + ports d'amorce + SSDP."""
+        mod = registry.get("netrecon")
+        if mod is None:
+            raise HTTPException(status_code=503, detail="module netrecon indisponible")
+        _audit("netrecon_hors_perimetre" if bypass else "netrecon_discover",
+               f"{cidr}" + (" — HORS PÉRIMÈTRE (bypass)" if bypass else ""))
+        return mod.discover(cidr)
+
+    @app.get("/netrecon/scan")
+    def netrecon_scan(ip: str, bypass: bool = False):
+        mod = registry.get("netrecon")
+        if mod is None:
+            raise HTTPException(status_code=503, detail="module netrecon indisponible")
+        _audit("netrecon_hors_perimetre" if bypass else "netrecon_scan",
+               f"{ip}" + (" — HORS PÉRIMÈTRE (bypass)" if bypass else ""))
+        return mod.ports(ip)
+
+    @app.get("/netrecon/web")
+    def netrecon_web(url: str, bypass: bool = False):
+        mod = registry.get("netrecon")
+        if mod is None:
+            raise HTTPException(status_code=503, detail="module netrecon indisponible")
+        _audit("netrecon_hors_perimetre" if bypass else "netrecon_web",
+               f"{url}" + (" — HORS PÉRIMÈTRE (bypass)" if bypass else ""))
+        return mod.web(url)
+
+    @app.get("/netrecon/tls")
+    def netrecon_tls(host: str, port: int = 443):
+        mod = registry.get("netrecon")
+        if mod is None:
+            raise HTTPException(status_code=503, detail="module netrecon indisponible")
+        return mod.tls(host, port)
 
     @app.get("/procvuln")
     def procvuln_get():

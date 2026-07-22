@@ -69,6 +69,10 @@ export interface ScanResult { target: string; mode: string; hosts: ScanHost[]; r
 export interface ProcCve { cve: string; cvss: number; severity: string; summary: string; url: string; }
 export interface ProcVuln { process: string; pid: number | null; exe: string; product: string; version: string; cves: ProcCve[]; }
 export interface ProcVulnResult { apps: ProcVuln[]; scanned: number; running: boolean; available: boolean; note: string; }
+export interface NetHost { ip: string; hostname: string; open_ports: number[]; device: string; source: string; }
+export interface NetPort { port: number; proto: string; service: string; product: string; banner: string; }
+export interface NetWebFinding { path: string; status: number; size: number; kind: string; }
+export interface NetTls { host: string; port: number; ok: boolean; issuer: string; subject: string; not_after: string; protocol: string; cipher: string; weak: string[]; error: string; }
 export interface HidsEvent { ts: string; log: string; event_id: number; severity: string; label: string; message: string; }
 export interface HidsResult { events: HidsEvent[]; running: boolean; available: boolean; note: string; }
 export interface MailLink { url: string; suspicious: boolean; reason: string; }
@@ -151,6 +155,10 @@ export const api = {
   firewallRules: () => get<string[]>("/firewall/rules"),
   scan: () => get<ScanResult>("/scan"),
   scanRun: (target: string, mode: string, bypass = false) => post<{ ok: boolean; error?: string }>("/scan/run", { target, mode, bypass }),
+  netreconDiscover: (cidr: string, bypass = false) => get<NetHost[]>(`/netrecon/discover?cidr=${encodeURIComponent(cidr)}&bypass=${bypass}`),
+  netreconScan: (ip: string, bypass = false) => get<NetPort[]>(`/netrecon/scan?ip=${encodeURIComponent(ip)}&bypass=${bypass}`),
+  netreconWeb: (url: string, bypass = false) => get<NetWebFinding[]>(`/netrecon/web?url=${encodeURIComponent(url)}&bypass=${bypass}`),
+  netreconTls: (host: string, port = 443) => get<NetTls>(`/netrecon/tls?host=${encodeURIComponent(host)}&port=${port}`),
   procvuln: () => get<ProcVulnResult>("/procvuln"),
   procvulnRun: () => post<{ ok: boolean; error?: string }>("/procvuln/run", {}),
   hids: () => get<HidsResult>("/hids"),

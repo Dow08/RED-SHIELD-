@@ -22,6 +22,119 @@ function ScanAiButton({ scan }: { scan: ScanResult }) {
   );
 }
 
+/* ============ RECON NATIF (sans nmap, mobile-ready) ============ */
+function inMissionScope(t: string): boolean {
+  let p = ""; try { p = localStorage.getItem("rs.mission.perimeter") || ""; } catch { /* */ }
+  p = p.trim(); if (!p) return true;
+  return p.split(/[\s,;]+/).filter(Boolean).some((s) => t === s || t.includes(s) || s.includes(t));
+}
+function confirmBypass(t: string): boolean | null {
+  if (inMissionScope(t)) return false;      // dans le périmètre → pas de bypass
+  let p = ""; try { p = localStorage.getItem("rs.mission.perimeter") || ""; } catch { /* */ }
+  return window.confirm(`⚠️ Cible HORS du périmètre de mission :\n\n${t}\n\nPérimètre : ${p}\n\nLancer quand même ? (journalisé dans la piste d'audit)`) ? true : null;
+}
+
+function NetreconCard() {
+  const [cidr, setCidr] = useState("192.168.1.0/24");
+  const [hosts, setHosts] = useState<import("../api").NetHost[] | null>(null);
+  const [busy, setBusy] = useState("");
+  const [ports, setPorts] = useState<Record<string, import("../api").NetPort[]>>({});
+  const [open, setOpen] = useState<string | null>(null);
+  const [webUrl, setWebUrl] = useState("");
+  const [web, setWeb] = useState<import("../api").NetWebFinding[] | null>(null);
+  const [tlsHost, setTlsHost] = useState("");
+  const [tls, setTls] = useState<import("../api").NetTls | null>(null);
+
+  const discover = async () => {
+    const by = confirmBypass(cidr); if (by === null) return;
+    setBusy("map"); setHosts(null);
+    try { setHosts(await api.netreconDiscover(cidr, by)); } catch { setHosts([]); }
+    setBusy("");
+  };
+  const scanHost = async (ip: string) => {
+    setOpen(open === ip ? null : ip);
+    if (ports[ip]) return;
+    setBusy("scan:" + ip);
+    try { const r = await api.netreconScan(ip, inMissionScope(ip) ? false : true); setPorts((p) => ({ ...p, [ip]: r })); } catch { /* */ }
+    setBusy("");
+  };
+  const runWeb = async () => {
+    const by = confirmBypass(webUrl.replace(/^https?:\/\//, "").split(/[/:]/)[0]); if (by === null) return;
+    setBusy("web"); setWeb(null);
+    try { setWeb(await api.netreconWeb(webUrl, by)); } catch { setWeb([]); }
+    setBusy("");
+  };
+  const runTls = async () => {
+    setBusy("tls"); setTls(null);
+    try { setTls(await api.netreconTls(tlsHost.replace(/^https?:\/\//, ""), 443)); } catch { /* */ }
+    setBusy("");
+  };
+
+  return (
+    <Card title="Cartographie native — sans nmap" right="mobile-ready">
+      <div className="note">Découverte d'hôtes (TCP + <b>SSDP/UPnP</b>), scan de ports et empreinte de services — <b>pur socket, sans nmap</b> (même logique que le futur outil mobile). Respecte le <b>périmètre de mission</b> (onglet plus bas) ; hors périmètre = confirmation + journalisation.</div>
+      <div className="toolbar">
+        <input className="key" style={{ letterSpacing: 0, width: 240 }} value={cidr} onChange={(e) => setCidr(e.target.value)} placeholder="CIDR / IP — ex. 192.168.1.0/24" />
+        <button className="btn" disabled={!!busy} onClick={discover}>{busy === "map" ? "Cartographie…" : "🗺️ Cartographier"}</button>
+      </div>
+      {hosts !== null && hosts.length === 0 && <div className="empty">Aucun hôte détecté (ou cible injoignable).</div>}
+      {hosts && hosts.length > 0 && (
+        <div>
+          <div className="disc" style={{ padding: "0 16px 4px" }}>{hosts.length} hôte(s) vivant(s) :</div>
+          {hosts.map((h) => (
+            <div key={h.ip} className="rcard">
+              <div className="rhead" style={{ cursor: "pointer" }} onClick={() => scanHost(h.ip)}>
+                <span className="nm mono">{h.ip}</span>
+                {h.hostname && <span className="ds">{h.hostname}</span>}
+                {h.device && <span className="badge" style={{ borderColor: "var(--accent)", color: "var(--accent)" }}>{h.device.slice(0, 40)}</span>}
+                <span style={{ marginLeft: "auto", display: "flex", gap: 4, flexWrap: "wrap" }}>
+                  {h.open_ports.map((p) => <span key={p} className="badge">{p}</span>)}
+                </span>
+                <span style={{ color: "var(--faint)" }}>{open === h.ip ? "▾" : "▸"}</span>
+              </div>
+              {open === h.ip && (
+                <div style={{ padding: "6px 0 2px" }}>
+                  {busy === "scan:" + h.ip && <div className="disc">Scan des ports…</div>}
+                  {ports[h.ip] && ports[h.ip].length === 0 && <div className="disc">Aucun port ouvert dans le top {50}.</div>}
+                  {ports[h.ip] && ports[h.ip].map((p) => (
+                    <div className="row" key={p.port}>
+                      <span className="nm mono">{p.port}/{p.proto}</span>
+                      <span className="ds">{[p.service, p.product].filter(Boolean).join(" · ")}</span>
+                      {p.product && <span className="badge" style={{ marginLeft: "auto" }}>{p.product.slice(0, 40)}</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="note" style={{ marginTop: 12 }}>Énumération web (façon <b>ffuf/gobuster</b>) : brute-force de répertoires/fichiers sur un service HTTP découvert.</div>
+      <div className="toolbar">
+        <input className="key" style={{ letterSpacing: 0, width: 240 }} value={webUrl} onChange={(e) => setWebUrl(e.target.value)} placeholder="http://192.168.1.10:8080" />
+        <button className="btn ghost" disabled={!webUrl || !!busy} onClick={runWeb}>{busy === "web" ? "Énumération…" : "📂 Énumérer"}</button>
+        <input className="key" style={{ letterSpacing: 0, width: 160 }} value={tlsHost} onChange={(e) => setTlsHost(e.target.value)} placeholder="hôte TLS (443)" />
+        <button className="btn ghost" disabled={!tlsHost || !!busy} onClick={runTls}>{busy === "tls" ? "TLS…" : "🔒 Audit TLS"}</button>
+      </div>
+      {web !== null && web.length === 0 && <div className="empty">Aucun chemin trouvé.</div>}
+      {web && web.map((f) => (
+        <div className="row" key={f.path}><span className="nm mono">{f.path}</span><span className="ds">{f.size} o</span><span className="badge" style={{ marginLeft: "auto", borderColor: f.status < 400 ? "var(--safe)" : "var(--watch)", color: f.status < 400 ? "var(--safe)" : "var(--watch)" }}>{f.status}</span></div>
+      ))}
+      {tls && (
+        <div className="rcard" style={{ borderLeft: `3px solid ${tls.weak.length ? "var(--crit)" : tls.ok ? "var(--safe)" : "var(--faint)"}` }}>
+          {!tls.ok ? <div className="rbody">TLS indisponible : {tls.error}</div> : <>
+            <div className="rbody"><b>{tls.subject || tls.host}</b> · {tls.protocol} · {tls.cipher}</div>
+            <div className="rbody">Émetteur : {tls.issuer || "—"} · expire : {tls.not_after || "—"}</div>
+            {tls.weak.length > 0 && <div className="rmeta">{tls.weak.map((w, i) => <span key={i} className="badge m">{w}</span>)}</div>}
+            {tls.weak.length === 0 && <div className="disc" style={{ color: "var(--safe)" }}>Aucune faiblesse évidente ✅</div>}
+          </>}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 /* ============ RECON ============ */
 export default function Recon({ lan, scan, procvuln, onScan }: { lan: LanDevice[] | null; scan: ScanResult | null; procvuln: import("../api").ProcVulnResult | null; onScan: (t: string, m: string, bypass?: boolean) => void }) {
   const devices = lan || [];
@@ -54,6 +167,7 @@ export default function Recon({ lan, scan, procvuln, onScan }: { lan: LanDevice[
   return (
     <div className="grid">
       <div className="col">
+        <NetreconCard />
         <Card title="Scan hôte (nmap + CVE)" right={scan && scan.nmap_available === false ? "nmap absent" : "prêt"}>
           <div className="note">Cibles <b>autorisées uniquement</b> (propriété ou autorisation écrite). Chaque service détecté est croisé avec <b>NVD en ligne</b> (source officielle, à jour) → lien NVD. Nécessite <b>air-gapped OFF</b>.</div>
           <div className="toolbar" style={{ flexWrap: "wrap" }}>
