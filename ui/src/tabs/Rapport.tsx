@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
-import type { ReportMeta, ReportMission, ReportFinding, Sev, Attachment } from "../api";
+import type { ReportMeta, ReportMission, ReportFinding, Sev, Attachment, ReportBlock } from "../api";
 import { Card } from "../shared";
 import { toAttachment } from "../lib/img";
 
@@ -114,6 +114,16 @@ export default function Rapport() {
     [a[i], a[j]] = [a[j], a[i]]; return { ...m, findings: a };
   });
   const toggleSection = (k: string) => setModel((m) => m && { ...m, sections: { ...m.sections, [k]: !m.sections[k] } });
+  // -- sections libres (blocs) --------------------------------------------
+  const addBlock = () => setModel((mm) => mm && { ...mm, blocks: [...(mm.blocks || []), { id: "b" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), title: "Nouvelle section", body: "", placement: "intro" as const }] });
+  const upBlock = (id: string, patch: Partial<ReportBlock>) => setModel((mm) => mm && { ...mm, blocks: (mm.blocks || []).map((b) => (b.id === id ? { ...b, ...patch } : b)) });
+  const removeBlock = (id: string) => setModel((mm) => mm && { ...mm, blocks: (mm.blocks || []).filter((b) => b.id !== id) });
+  const moveBlock = (id: string, dir: -1 | 1) => setModel((mm) => {
+    if (!mm) return mm;
+    const a = [...(mm.blocks || [])]; const i = a.findIndex((b) => b.id === id); const j = i + dir;
+    if (i < 0 || j < 0 || j >= a.length) return mm;
+    [a[i], a[j]] = [a[j], a[i]]; return { ...mm, blocks: a };
+  });
   const onLogo = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0]; if (!f) return;
     const att = await toAttachment(f, { maxDim: 320, mime: "image/png" });
@@ -132,6 +142,7 @@ export default function Rapport() {
   const shown = (m?.findings || []).filter((f) => f.included);
   const withRemed = shown.filter((f) => f.remediation);
   const sec = m?.sections || {};
+  const blocks = m?.blocks || [];
 
   return (
     <>
@@ -178,6 +189,27 @@ export default function Rapport() {
                     </span>
                   ))}
                 </div>
+              </div>
+
+              {/* sections libres */}
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
+                  <span className="muted" style={{ fontSize: 11 }}>Sections libres (intro, contexte, méthodo, conclusion…)</span>
+                  <button className="btn ghost" style={{ padding: "3px 9px", fontSize: 11 }} onClick={addBlock}>➕ Ajouter une section</button>
+                  {blocks.length === 0 && <span className="muted" style={{ fontSize: 11 }}>— le corps de chaque section s'écrit dans l'aperçu</span>}
+                </div>
+                {blocks.map((b) => (
+                  <div key={b.id} className="rcard" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    <input className="key" style={{ flex: 1, minWidth: 160, letterSpacing: 0 }} value={b.title} onChange={(e) => upBlock(b.id, { title: e.target.value })} placeholder="Titre de la section" />
+                    <select className="key" style={{ width: "auto", letterSpacing: 0 }} value={b.placement} onChange={(e) => upBlock(b.id, { placement: e.target.value as "intro" | "fin" })}>
+                      <option value="intro">Au début (après couverture)</option>
+                      <option value="fin">À la fin</option>
+                    </select>
+                    <button className="btn ghost" style={{ padding: "2px 8px" }} onClick={() => moveBlock(b.id, -1)}>▲</button>
+                    <button className="btn ghost" style={{ padding: "2px 8px" }} onClick={() => moveBlock(b.id, 1)}>▼</button>
+                    <button className="btn ghost" style={{ padding: "2px 8px" }} onClick={() => removeBlock(b.id)}>✕</button>
+                  </div>
+                ))}
               </div>
 
               {/* sections */}
@@ -266,6 +298,21 @@ export default function Rapport() {
             <div className="rp-lbl">Couverture</div>
           </div>
 
+          {/* ---------- SECTIONS LIBRES — intro (après couverture) ---------- */}
+          {blocks.filter((b) => b.placement === "intro").length > 0 && (
+            <div className="rpage rp-body">
+              <div className="r-top"><div className="r-mark">DP <span>Cyber</span></div><div className="r-ref">{m.meta.reference}</div></div>
+              {blocks.filter((b) => b.placement === "intro").map((b) => (
+                <div key={b.id} style={{ marginBottom: 8 }}>
+                  <Editable value={b.title} onCommit={(v) => upBlock(b.id, { title: v })} ph="Titre de section" style={{ fontFamily: "Georgia, serif", fontSize: 17, margin: "18px 0 8px", fontWeight: 700 }} />
+                  <Editable rich value={b.body} onCommit={(v) => upBlock(b.id, { body: v })} ph="Rédige cette section…" style={{ fontSize: 13, color: "#33322f", lineHeight: 1.55 }} />
+                </div>
+              ))}
+              <div className="rp-foot">{m.meta.marque} · {m.meta.confidentialite}</div>
+              <div className="rp-lbl">Contexte</div>
+            </div>
+          )}
+
           {/* ---------- SYNTHÈSE + CONSTATS (Cabinet) ---------- */}
           <div className="rpage rp-body">
             <div className="r-top"><div className="r-mark">DP <span>Cyber</span></div><div className="r-ref">{m.meta.reference} · p.2</div></div>
@@ -344,6 +391,21 @@ export default function Rapport() {
             <div className="rp-foot">{m.meta.marque} · {m.meta.confidentialite}</div>
             <div className="rp-lbl">Remédiation</div>
           </div>
+
+          {/* ---------- SECTIONS LIBRES — fin ---------- */}
+          {blocks.filter((b) => b.placement === "fin").length > 0 && (
+            <div className="rpage rp-body">
+              <div className="r-top"><div className="r-mark">DP <span>Cyber</span></div><div className="r-ref">{m.meta.reference}</div></div>
+              {blocks.filter((b) => b.placement === "fin").map((b) => (
+                <div key={b.id} style={{ marginBottom: 8 }}>
+                  <Editable value={b.title} onCommit={(v) => upBlock(b.id, { title: v })} ph="Titre de section" style={{ fontFamily: "Georgia, serif", fontSize: 17, margin: "18px 0 8px", fontWeight: 700 }} />
+                  <Editable rich value={b.body} onCommit={(v) => upBlock(b.id, { body: v })} ph="Rédige cette section…" style={{ fontSize: 13, color: "#33322f", lineHeight: 1.55 }} />
+                </div>
+              ))}
+              <div className="rp-foot">{m.meta.marque} · {m.meta.confidentialite}</div>
+              <div className="rp-lbl">Conclusion</div>
+            </div>
+          )}
         </div>
       )}
     </>

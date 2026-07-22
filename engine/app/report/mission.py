@@ -67,6 +67,7 @@ class ReportModel(BaseModel):
     findings: list[Finding] = []
     conformity: list[FrameworkScore] = []
     annexes: list = []      # captures jointes : [{name, type, data(data-URL)}] (Phase 3)
+    blocks: list = []       # sections libres : [{id, title, body(html), placement}]
     sections: dict = {"constats": True, "remediation": True, "conformite": True, "annexe": True}
     generated_at: str = ""
 
