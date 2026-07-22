@@ -1,9 +1,20 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import type { ReportMeta, ReportMission, ReportFinding, Sev } from "../api";
 import { Card } from "../shared";
 
 const RING = (band: string) => (band === "critique" ? "#b4232a" : band === "elevee" ? "#b7791f" : "#2f7d4f");
+
+/** Zone éditable directement sur le document (contentEditable robuste : commit au blur, pas de saut de curseur). */
+function Editable({ value, onCommit, ph, className, style }: { value: string; onCommit: (v: string) => void; ph?: string; className?: string; style?: React.CSSProperties }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (ref.current && ref.current.textContent !== value) ref.current.textContent = value; }, [value]);
+  return (
+    <div ref={ref} contentEditable suppressContentEditableWarning
+      className={`r-edit ${className || ""}`} style={style} data-ph={ph} title="Cliquer pour éditer"
+      onBlur={(e) => { const t = e.currentTarget.textContent || ""; if (t !== value) onCommit(t); }} />
+  );
+}
 const SEVS: Sev[] = ["crit", "haut", "moyen", "faible"];
 const SECTIONS: [string, string][] = [["constats", "Constats"], ["remediation", "Remédiation"], ["conformite", "Conformité"], ["annexe", "Annexe / captures"]];
 
@@ -74,7 +85,7 @@ export default function Rapport() {
             <button className="btn" disabled={!m} onClick={() => window.print()}>⬇ Générer le PDF</button>
           </span>
         }>
-          <div className="note">Document <b>vivant</b> : les faits viennent des <b>données réelles</b> (rien d'inventé), et tu retouches ici avant l'export — client, <b>annotations</b> par constat, ordre, masquage, marque/logo. Sauvegarde pour reprendre plus tard.</div>
+          <div className="note">Document <b>vivant</b> : les faits viennent des <b>données réelles</b> (rien d'inventé). ✏️ <b>Clique directement dans l'aperçu</b> (verdict, annotation d'un constat, remédiation) pour l'éditer sur le document ; le panneau ci-dessous gère le structurel (client, ordre, masquage, marque/logo). Pense à <b>Enregistrer</b>.</div>
 
           {showEditor && m && (
             <div style={{ padding: "4px 16px 14px", display: "flex", flexDirection: "column", gap: 12 }}>
@@ -176,7 +187,7 @@ export default function Rapport() {
             <div className="r-eyebrow">Synthèse pour la direction</div>
             <div className="r-syn">
               <div className="r-ring" style={{ ["--v" as any]: m.score, ["--rc" as any]: RING(m.band) }}><b>{m.score}</b></div>
-              <div className="r-verdict">{m.verdict}</div>
+              <Editable className="r-verdict" value={m.verdict} ph="Rédige la synthèse…" onCommit={(v) => setModel((mm) => mm && { ...mm, verdict: v })} />
             </div>
             <div className="r-kpi">
               <div><div className="n">{shown.length}</div><div className="t">à traiter</div></div>
@@ -194,7 +205,7 @@ export default function Rapport() {
                       <td>
                         <div className="rt">{f.title}</div>
                         {(f.detail || f.description) && <div className="rd">{f.detail || f.description}</div>}
-                        {f.note && <div className="r-annot"><b>Note :</b> {f.note}</div>}
+                        <Editable className="r-annot" value={f.note} ph="✏️ annoter ce constat…" onCommit={(v) => upFinding(f.id, { note: v })} />
                       </td>
                       <td className="mono" style={{ width: 90, textAlign: "right" }}>
                         {f.cve || [f.refs.ISO, f.refs.NIST, f.refs.CIS].filter(Boolean)[0] || ""}
@@ -218,7 +229,7 @@ export default function Rapport() {
               {withRemed.map((f) => (
                 <div className="r-rem" key={f.id}>
                   <div className="rt"><span className={`r-sev ${f.severity}`} style={{ marginRight: 6 }}>{f.severity}</span>{f.title}</div>
-                  <div className="rd">{f.remediation}</div>
+                  <Editable className="rd" value={f.remediation} ph="Remédiation…" onCommit={(v) => upFinding(f.id, { remediation: v })} />
                 </div>
               ))}
             </>}

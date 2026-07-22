@@ -152,6 +152,13 @@ a:hover { text-decoration: underline; }
 .rp-body .r-annot { border: 1px solid #e5e3db; background: #fbf7ef; border-radius: 5px; padding: 6px 9px; margin-top: 6px;
   font-size: 11px; color: #6b5a2f; } .rp-body .r-annot b { color: #8a6d12; }
 
+/* --- Édition directe sur le document (contentEditable) --- */
+.r-edit { outline: none; border-radius: 2px; transition: box-shadow .12s, background .12s; }
+.r-edit:hover { background: rgba(201, 162, 39, .10); box-shadow: 0 0 0 1px rgba(201, 162, 39, .45); cursor: text; }
+.r-edit:focus { background: rgba(47, 122, 140, .08); box-shadow: 0 0 0 1.5px rgba(18, 80, 126, .55); }
+.r-edit:empty::before { content: attr(data-ph); color: #bdb9b0; font-style: italic; }
+.rp-body .r-annot.r-edit:empty { border: 1px dashed #e0ddd4; background: transparent; }
+
 /* --- Impression : on isole le rapport, format A4 --- */
 @media print {
   body * { visibility: hidden !important; }
@@ -159,6 +166,9 @@ a:hover { text-decoration: underline; }
   .report-doc { position: absolute; inset: 0; margin: 0; padding: 0; gap: 0; display: block; }
   .rpage { box-shadow: none; border-radius: 0; margin: 0; width: 100%; min-height: 100vh; page-break-after: always; }
   .no-print { display: none !important; }
+  .r-edit:hover, .r-edit:focus { background: none !important; box-shadow: none !important; }
+  .r-edit:empty { display: none !important; }
+  .r-edit:empty::before { content: "" !important; }
   @page { size: A4; margin: 0; }
 }
 
