@@ -23,6 +23,8 @@ export default function Rapport() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [showEditor, setShowEditor] = useState(true);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiMsg, setAiMsg] = useState("");
 
   // -- chargement : brouillon sauvegardé, sinon assemblage frais ----------
   useEffect(() => {
@@ -49,6 +51,22 @@ export default function Rapport() {
     setBusy(true);
     try { await api.reportDraftSave(model); setMsg("Brouillon enregistré ✅"); } catch { setMsg("échec de sauvegarde"); }
     setBusy(false);
+  };
+
+  // -- synthèse assistée IA (réutilise le connecteur LLM ; gated air-gapped) --
+  const aiSynth = async () => {
+    if (!model) return;
+    setAiBusy(true); setAiMsg("");
+    const inc = model.findings.filter((f) => f.included);
+    const text = `Score d'exposition ${model.score}/100 (${model.band_label}). `
+      + (inc.length ? `Constats : ${inc.map((f) => `${f.severity} — ${f.title}`).join(" ; ")}. ` : "Aucun constat prioritaire. ")
+      + (model.conformity.length ? `Conformité : ${model.conformity.map((c) => `${c.label} ${c.score}/100 (${c.ecarts} écart(s))`).join(" ; ")}.` : "");
+    try {
+      const r = await api.llmAnalyze(text, "synthèse exécutive d'un rapport d'audit de sécurité — ton professionnel et factuel, en français, 4 à 6 phrases, sans inventer de détail");
+      if (r.ok && r.analysis) { setModel((mm) => mm && { ...mm, verdict: r.analysis! }); setAiMsg("Synthèse générée ✅ — relis et ajuste, c'est toi qui signes."); }
+      else { setAiMsg((r.error || "échec") + " — connecteur LLM requis (onglet Connecteurs) + air-gapped désactivé."); }
+    } catch { setAiMsg("moteur injoignable"); }
+    setAiBusy(false);
   };
 
   // -- mutateurs -----------------------------------------------------------
@@ -138,7 +156,11 @@ export default function Rapport() {
 
               {/* verdict éditable */}
               <div>
-                <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>Synthèse / verdict (éditable)</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
+                  <span className="muted" style={{ fontSize: 11 }}>Synthèse / verdict (éditable)</span>
+                  <button className="btn ghost" style={{ padding: "3px 9px", fontSize: 11 }} disabled={aiBusy} onClick={aiSynth}>{aiBusy ? "Rédaction IA…" : "🤖 Rédiger avec l'IA"}</button>
+                  {aiMsg && <span className="muted" style={{ fontSize: 11, color: aiMsg.includes("✅") ? "var(--safe)" : "var(--watch)" }}>{aiMsg}</span>}
+                </div>
                 <textarea value={m.verdict} onChange={(e) => setModel((mm) => mm && { ...mm, verdict: e.target.value })}
                   rows={3} style={{ width: "100%", background: "var(--card-solid)", border: "1px solid var(--card-b)", borderRadius: 8, color: "var(--ink)", fontFamily: "var(--ui)", fontSize: 12.5, padding: 8 }} />
               </div>
