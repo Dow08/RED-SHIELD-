@@ -31,22 +31,92 @@ function ScoreRing({ score, label, sub }: { score: number; label: string; sub: s
   );
 }
 
-function GrcControlEditor({ c, busy, onSet }: { c: import("../api").GrcControl; busy: boolean; onSet: (id: string, status: string, note: string) => void }) {
-  const [status, setStatus] = useState<string>(c.status);
-  const [note, setNote] = useState(c.note);
-  useEffect(() => { setStatus(c.status); setNote(c.note); }, [c.status, c.note]);
+type Att = import("../api").Attachment;
+const STATUS_FR: Record<string, string> = { conforme: "Conforme", a_traiter: "À traiter", non_conforme: "Non conforme", na: "Non applicable", manuel: "À évaluer" };
+
+function EvidenceBox({ note, setNote, atts, setAtts }: { note: string; setNote: (v: string) => void; atts: Att[]; setAtts: (a: Att[]) => void }) {
+  const addFiles = (files: FileList | null) => {
+    if (!files) return;
+    Array.from(files).slice(0, 10).forEach((f) => {
+      const r = new FileReader();
+      r.onload = () => setAtts([...atts, { name: f.name, type: f.type, data: String(r.result) }]);
+      r.readAsDataURL(f);
+    });
+  };
   return (
-    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-      <select className="key" style={{ width: "auto", letterSpacing: 0 }} value={status} onChange={(e) => setStatus(e.target.value)}>
-        <option value="conforme">Conforme</option>
-        <option value="a_traiter">À traiter</option>
-        <option value="non_conforme">Non conforme</option>
-        <option value="na">Non applicable</option>
-        <option value="manuel">À évaluer</option>
-      </select>
-      <input className="key" style={{ flex: 1, minWidth: 180, letterSpacing: 0 }} placeholder="Preuve / justification (ticket, capture, procédure…)" value={note} onChange={(e) => setNote(e.target.value)} />
-      <button className="btn" disabled={busy} onClick={() => onSet(c.id, status, note)}>{busy ? "…" : "Enregistrer"}</button>
-      {c.signal && c.source === "manuel" && <button className="btn ghost" disabled={busy} onClick={() => onSet(c.id, "auto", "")}>↻ Auto</button>}
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <input className="key" style={{ width: "100%", letterSpacing: 0 }} placeholder="Preuve / justification (référence ticket, procédure, commentaire…)" value={note} onChange={(e) => setNote(e.target.value)} />
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <label className="btn ghost" style={{ cursor: "pointer", padding: "4px 10px", fontSize: 11 }}>📎 Joindre un fichier (capture, PDF…)
+          <input type="file" multiple accept="image/*,.pdf,.txt,.doc,.docx" onChange={(e) => addFiles(e.target.files)} style={{ display: "none" }} />
+        </label>
+        {atts.length === 0 && <span className="muted" style={{ fontSize: 11 }}>aucune pièce jointe</span>}
+      </div>
+      {atts.length > 0 && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {atts.map((a, i) => (
+            <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 6, border: "1px solid var(--card-b)", borderRadius: 6, padding: "3px 6px", fontSize: 11, background: "var(--card-solid)" }}>
+              {a.type.startsWith("image/") ? <img src={a.data} alt="" style={{ width: 26, height: 26, objectFit: "cover", borderRadius: 3 }} /> : <span>📄</span>}
+              <a href={a.data} download={a.name} style={{ maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</a>
+              <button className="btn ghost" style={{ padding: "0 5px", fontSize: 11 }} onClick={() => setAtts(atts.filter((_, j) => j !== i))}>✕</button>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GrcControlEditor({ c, busy, onSet }: { c: import("../api").GrcControl; busy: boolean; onSet: (id: string, status: string, note: string, atts: Att[]) => void }) {
+  const [note, setNote] = useState(c.note);
+  const [atts, setAtts] = useState<Att[]>(c.attachments || []);
+  const [override, setOverride] = useState<string>(c.overridden ? c.status : "conforme");
+  const [showOverride, setShowOverride] = useState(false);
+  const [mstatus, setMstatus] = useState<string>(c.status === "manuel" ? "conforme" : c.status);
+  useEffect(() => {
+    setNote(c.note); setAtts(c.attachments || []); setShowOverride(false);
+    setMstatus(c.status === "manuel" ? "conforme" : c.status);
+  }, [c.id]); // eslint-disable-line
+  const isAuto = !!c.signal;
+
+  if (isAuto) {
+    // Contrôle AUTO : le verdict calculé fait foi. On documente (preuve) ; la surcharge est délibérée.
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <div className="disc" style={{ padding: 0 }}>
+          <b style={{ color: "var(--accent)" }}>Évalué automatiquement</b> depuis l'état réel de la machine{c.overridden && <b style={{ color: "var(--watch)" }}> — surchargé manuellement</b>}. Joins une preuve si besoin ; surcharge uniquement si tu contestes le verdict.
+        </div>
+        <EvidenceBox note={note} setNote={setNote} atts={atts} setAtts={setAtts} />
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <button className="btn" disabled={busy} onClick={() => onSet(c.id, "auto", note, atts)}>{busy ? "…" : "💾 Enregistrer la preuve"}</button>
+          {!showOverride && <button className="btn ghost" disabled={busy} onClick={() => setShowOverride(true)}>Surcharger le verdict…</button>}
+          {c.overridden && <button className="btn ghost" disabled={busy} onClick={() => onSet(c.id, "auto", note, atts)}>↻ Revenir à l'auto</button>}
+          {showOverride && (
+            <>
+              <select className="key" style={{ width: "auto", letterSpacing: 0 }} value={override} onChange={(e) => setOverride(e.target.value)}>
+                {["conforme", "a_traiter", "non_conforme", "na"].map((s) => <option key={s} value={s}>{STATUS_FR[s]}</option>)}
+              </select>
+              <button className="btn" disabled={busy} onClick={() => onSet(c.id, override, note, atts)}>Appliquer la surcharge</button>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Contrôle MANUEL : à toi de l'évaluer. Le statut + la preuve sont le contenu.
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div className="disc" style={{ padding: 0 }}><b style={{ color: "var(--accent2)" }}>À évaluer par toi</b> (contrôle organisationnel) : choisis un statut et <b>joins une preuve</b> (procédure, capture, attestation…).</div>
+      <EvidenceBox note={note} setNote={setNote} atts={atts} setAtts={setAtts} />
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <span className="muted" style={{ fontSize: 11 }}>Statut :</span>
+        <select className="key" style={{ width: "auto", letterSpacing: 0 }} value={mstatus} onChange={(e) => setMstatus(e.target.value)}>
+          {["conforme", "a_traiter", "non_conforme", "na"].map((s) => <option key={s} value={s}>{STATUS_FR[s]}</option>)}
+        </select>
+        <button className="btn" disabled={busy} onClick={() => onSet(c.id, mstatus, note, atts)}>{busy ? "…" : "💾 Enregistrer l'évaluation"}</button>
+        {c.overridden && <button className="btn ghost" disabled={busy} onClick={() => onSet(c.id, "auto", note, atts)}>Réinitialiser</button>}
+      </div>
     </div>
   );
 }
@@ -59,9 +129,9 @@ function Posture() {
   const [open, setOpen] = useState<string | null>(null);
   const load = () => api.grcPosture().then(setPost).catch(() => setPost(null));
   useEffect(() => { load(); }, []);
-  const setControl = async (id: string, status: string, note: string) => {
+  const setControl = async (id: string, status: string, note: string, atts?: import("../api").Attachment[]) => {
     setBusy(id);
-    try { setPost(await api.grcSetControl(id, status, note)); } catch { /* ignore */ }
+    try { setPost(await api.grcSetControl(id, status, note, atts)); } catch { /* ignore */ }
     setBusy(null);
   };
   if (!post) return <Card title="Conformité — assistant CISO"><div className="empty">Chargement de la posture de conformité…</div></Card>;
@@ -113,7 +183,8 @@ function Posture() {
                   <div className="rhead" style={{ cursor: "pointer" }} onClick={() => setOpen(isOpen ? null : c.id)}>
                     <span className="pr" style={{ color: meta.color, borderColor: meta.color, background: "transparent", border: `1px solid ${meta.color}` }}>{meta.short}</span>
                     <span className="rtitle" style={{ fontSize: 13 }}>{c.title}</span>
-                    <span className="badge" style={{ marginLeft: "auto", opacity: 0.65 }}>{c.source === "auto" ? "auto" : "manuel"}</span>
+                    {c.attachments.length > 0 && <span className="badge" style={{ marginLeft: "auto", borderColor: "var(--accent)", color: "var(--accent)" }}>📎 {c.attachments.length}</span>}
+                    <span className="badge" style={{ marginLeft: c.attachments.length > 0 ? 0 : "auto", opacity: 0.65 }}>{c.source === "auto" ? "auto" : "manuel"}</span>
                     <span style={{ color: "var(--faint)" }}>{isOpen ? "▾" : "▸"}</span>
                   </div>
                   <div className="rmeta">
@@ -121,7 +192,8 @@ function Posture() {
                     {c.refs.NIST && <span className="badge">NIST {c.refs.NIST}</span>}
                     {c.refs.CIS && <span className="badge">CIS {c.refs.CIS}</span>}
                   </div>
-                  {(c.finding || c.note) && <div className="rbody">{c.finding || c.note}</div>}
+                  {c.finding && <div className="rbody">{c.finding}</div>}
+                  {c.note && <div className="rbody" style={{ color: "var(--accent2)" }}>📝 {c.note}</div>}
                   {isOpen && (
                     <div style={{ marginTop: 10, borderTop: "1px solid var(--card-b)", paddingTop: 10 }}>
                       <div style={{ fontSize: 12, color: "var(--soft)", marginBottom: 6, lineHeight: 1.5 }}><b>Pourquoi :</b> {c.why}</div>

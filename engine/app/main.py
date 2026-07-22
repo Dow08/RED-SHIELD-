@@ -88,6 +88,7 @@ class GrcControlReq(BaseModel):
     id: str
     status: str          # conforme / a_traiter / non_conforme / na / manuel / auto
     note: str = ""
+    attachments: list | None = None   # [{name, type, data(data-URL)}] — preuve jointe
 
 
 class ReportMetaReq(BaseModel):
@@ -548,7 +549,7 @@ def create_app() -> FastAPI:
     @app.post("/grc/control")
     def grc_set_control(req: GrcControlReq):
         try:
-            result = _require("grc").set_control(req.id, req.status, req.note)
+            result = _require("grc").set_control(req.id, req.status, req.note, req.attachments)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
         _audit("grc_control", f"{req.id}={req.status}")

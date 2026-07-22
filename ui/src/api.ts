@@ -94,7 +94,8 @@ export interface AppUpdate { name: string; id: string; current: string; availabl
 export interface UpdaterResult { available_tool: boolean; reason: string; updates: AppUpdate[]; running: boolean; }
 export interface UpgradeResult { ok: boolean; dry_run?: boolean; command?: string; output?: string; error?: string; returncode?: number; }
 export type GrcStatus = "conforme" | "a_traiter" | "non_conforme" | "na" | "manuel";
-export interface GrcControl { id: string; domain: string; title: string; why: string; refs: Record<string, string>; remediation: string; families: string[]; signal: string | null; status: GrcStatus; finding: string; note: string; source: "auto" | "manuel"; }
+export interface Attachment { name: string; type: string; data: string; }
+export interface GrcControl { id: string; domain: string; title: string; why: string; refs: Record<string, string>; remediation: string; families: string[]; signal: string | null; status: GrcStatus; finding: string; note: string; attachments: Attachment[]; overridden: boolean; source: "auto" | "manuel"; }
 export interface GrcScore { framework: string; label: string; score: number; assessed: number; total: number; counts: Record<GrcStatus, number>; }
 export interface GrcPosture { frameworks: Record<string, string>; scores: GrcScore[]; controls: GrcControl[]; summary: { total: number; counts: Record<GrcStatus, number>; a_traiter_ids: string[] }; }
 export type Sev = "crit" | "haut" | "moyen" | "faible";
@@ -200,7 +201,7 @@ export const api = {
   reportDraftSave: (model: ReportMission) => post<{ ok: boolean }>("/report/draft", model),
   reportDraftClear: async () => { await fetch(BASE + "/report/draft", { method: "DELETE" }); },
   grcPosture: () => get<GrcPosture>("/grc"),
-  grcSetControl: (id: string, status: string, note: string) => post<GrcPosture>("/grc/control", { id, status, note }),
+  grcSetControl: (id: string, status: string, note: string, attachments?: Attachment[]) => post<GrcPosture>("/grc/control", { id, status, note, attachments: attachments ?? null }),
   grcExportUrl: BASE + "/grc/export",
   reportUrl: BASE + "/report/markdown",
   logsExportUrl: BASE + "/diagnostic/logs/export",

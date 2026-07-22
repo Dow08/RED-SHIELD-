@@ -74,6 +74,29 @@ def test_module_posture_and_set(tmp_path, monkeypatch):
     assert bkp["status"] == "non_conforme"
 
 
+def test_evidence_independent_of_auto_status(tmp_path, monkeypatch):
+    """Sur un contrôle AUTO, ajouter une preuve NE doit PAS écraser le verdict calculé."""
+    monkeypatch.setattr(grc, "_store_path", lambda: tmp_path / "s.json")
+    m = GrcModule(EventBus(), lambda: {"exposed_ports": 0})  # surface-exposition -> conforme auto
+    png = "data:image/png;base64,iVBORw0KGgo="
+    post = m.set_control("surface-exposition", "auto", "cf. capture ci-jointe",
+                         [{"name": "preuve.png", "type": "image/png", "data": png}])
+    c = next(x for x in post["controls"] if x["id"] == "surface-exposition")
+    assert c["source"] == "auto" and c["status"] == "conforme"       # verdict auto conservé
+    assert c["note"].startswith("cf.") and len(c["attachments"]) == 1  # preuve attachée
+    assert c["attachments"][0]["name"] == "preuve.png"
+
+
+def test_attachments_are_sanitized(tmp_path, monkeypatch):
+    monkeypatch.setattr(grc, "_store_path", lambda: tmp_path / "s.json")
+    ov = grc.save_override("mfa", "conforme", "", [
+        {"name": "ok", "type": "image/png", "data": "data:image/png;base64,AAAA"},
+        {"name": "pirate", "data": "http://evil/x"},   # rejeté (pas data-URL)
+        {"name": "sansdata"},                            # rejeté
+    ])
+    assert len(ov["mfa"]["attachments"]) == 1 and ov["mfa"]["attachments"][0]["name"] == "ok"
+
+
 def test_set_control_rejects_bad_input(tmp_path, monkeypatch):
     monkeypatch.setattr(grc, "_store_path", lambda: tmp_path / "s.json")
     m = GrcModule(EventBus(), lambda: {})

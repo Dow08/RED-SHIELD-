@@ -284,9 +284,12 @@ def evaluate(signals: dict, overrides: dict) -> dict:
     for c in CONTROLS:
         ov = overrides.get(c["id"]) or {}
         note = str(ov.get("note", ""))
-        if ov.get("status") in STATUSES:
+        attachments = ov.get("attachments") or []
+        overridden = ov.get("status") in STATUSES
+        if overridden:
             status, finding, source = ov["status"], "", "manuel"
         elif c.get("signal"):
+            # Verdict automatique — une preuve/annotation NE remplace PAS le statut calculé.
             status, finding = _auto(c["signal"], signals)
             source = "auto"
         else:
@@ -295,7 +298,7 @@ def evaluate(signals: dict, overrides: dict) -> dict:
             "id": c["id"], "domain": c["domain"], "title": c["title"], "why": c["why"],
             "refs": c["refs"], "remediation": c["remediation"], "families": _families(c["refs"]),
             "signal": c.get("signal"), "status": status, "finding": finding,
-            "note": note, "source": source,
+            "note": note, "attachments": attachments, "overridden": overridden, "source": source,
         })
     return {
         "frameworks": FRAMEWORKS,
@@ -357,12 +360,39 @@ def load_overrides() -> dict:
         return {}
 
 
-def save_override(control_id: str, status: str, note: str) -> dict:
+def _clean_attachments(items) -> list:
+    """Garde des pièces jointes saines : {name, type, data(data-URL)}, plafonnées."""
+    if not isinstance(items, list):
+        return []
+    out = []
+    for it in items[:10]:
+        if isinstance(it, dict) and isinstance(it.get("data"), str) and it["data"].startswith("data:"):
+            if len(it["data"]) > 6_000_000:      # ~4.5 Mo par fichier après base64
+                continue
+            out.append({"name": str(it.get("name", "pièce jointe"))[:120],
+                        "type": str(it.get("type", ""))[:80], "data": it["data"]})
+    return out
+
+
+def save_override(control_id: str, status: str, note: str, attachments=None) -> dict:
+    """Preuve = note + pièces jointes, INDÉPENDANTE du statut.
+
+    status == "auto" : retire la surcharge de statut (le verdict auto reprend la main)
+    mais conserve la preuve. Une entrée totalement vide est supprimée.
+    """
     ov = load_overrides()
-    if status == "auto":          # revenir à l'auto-évaluation
+    entry = dict(ov.get(control_id) or {})
+    entry["note"] = (note or "")[:2000]
+    if attachments is not None:
+        entry["attachments"] = _clean_attachments(attachments)
+    if status == "auto":
+        entry.pop("status", None)
+    elif status in STATUSES:
+        entry["status"] = status
+    if not entry.get("status") and not entry.get("note") and not entry.get("attachments"):
         ov.pop(control_id, None)
     else:
-        ov[control_id] = {"status": status, "note": note[:1000]}
+        ov[control_id] = entry
     p = _store_path()
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(ov, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -419,12 +449,12 @@ class GrcModule(Module):
     def posture(self) -> dict:
         return evaluate(self._collect_signals(), load_overrides())
 
-    def set_control(self, control_id: str, status: str, note: str = "") -> dict:
+    def set_control(self, control_id: str, status: str, note: str = "", attachments=None) -> dict:
         if control_id not in _BY_ID:
             raise ValueError("contrôle inconnu")
         if status not in STATUSES and status != "auto":
             raise ValueError("statut invalide")
-        save_override(control_id, status, note or "")
+        save_override(control_id, status, note or "", attachments)
         return self.posture()
 
     def export(self) -> str:
