@@ -224,4 +224,10 @@ export const api = {
   grcExportUrl: BASE + "/grc/export",
   reportUrl: BASE + "/report/markdown",
   logsExportUrl: BASE + "/diagnostic/logs/export",
+  backupExportUrl: BASE + "/backup/export",
+  backupImport: async (bundle: { grc?: unknown; report_draft?: unknown }): Promise<{ ok: boolean; restored: string[] }> => {
+    const res = await fetch(BASE + "/backup/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(bundle) });
+    if (!res.ok) throw new Error("import refusé (" + res.status + ")");
+    return res.json();
+  },
 };

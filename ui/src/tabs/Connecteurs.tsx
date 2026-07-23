@@ -36,6 +36,16 @@ export default function Connecteurs({ airgapped, connectors, onRefresh }: { airg
   const [imap, setImap] = useState({ host: "", port: 993, username: "", password: "" });
   const [imapMsg, setImapMsg] = useState("");
   const saveImap = async () => { await api.connectorSet("imap", JSON.stringify(imap)); onRefresh(); setImap({ ...imap, password: "" }); setImapMsg("Enregistré — surveillance active dans l'onglet SOC (air-gapped OFF requis)."); };
+  const [bkMsg, setBkMsg] = useState("");
+  const bkFile = useRef<HTMLInputElement>(null);
+  const doImport = async (f: File) => {
+    try {
+      const bundle = JSON.parse(await f.text());
+      const r = await api.backupImport({ grc: bundle.grc, report_draft: bundle.report_draft });
+      setBkMsg("✅ Restauré : " + (r.restored.join(", ") || "rien") + ". Recharge la page pour voir la conformité restaurée.");
+      onRefresh();
+    } catch { setBkMsg("❌ Fichier de sauvegarde invalide ou refusé."); }
+  };
   const simple: [string, string][] = [["virustotal", "VirusTotal"], ["abuseipdb", "AbuseIPDB"], ["greynoise", "GreyNoise"], ["shodan", "Shodan"]];
   return (
     <Card title="Connecteurs — clés API" right="chiffrées (keyring OS)">
@@ -88,6 +98,15 @@ export default function Connecteurs({ airgapped, connectors, onRefresh }: { airg
         {connected("imap") ? <><span className="stt on">configuré ✓</span><button className="btn ghost" onClick={() => del("imap")}>Supprimer</button></> : <span className="stt off">non configuré</span>}
       </div>
       {imapMsg && <div className="disc" style={{ padding: "0 16px 14px", color: "var(--accent)" }}>{imapMsg}</div>}
+
+      <div className="card-h" style={{ marginTop: 4 }}><h2>Sauvegarde & restauration</h2></div>
+      <div className="note">Exporte ton <b>travail</b> (évaluations de conformité GRC + brouillon de rapport) dans un fichier, pour le restaurer sur un autre poste ou après réinstallation. <b>Les clés API ne sont pas exportées</b> (elles restent dans le trousseau de l'OS) : re-saisis-les après restauration.</div>
+      <div className="row" style={{ gap: 8 }}>
+        <a className="btn ghost" href={api.backupExportUrl} download>⬇️ Exporter la sauvegarde</a>
+        <button className="btn ghost" onClick={() => bkFile.current?.click()}>⬆️ Restaurer depuis un fichier</button>
+        <input ref={bkFile} type="file" accept="application/json,.json" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) doImport(f); e.currentTarget.value = ""; }} />
+      </div>
+      {bkMsg && <div className="disc" style={{ padding: "0 16px 14px", color: "var(--accent)" }}>{bkMsg}</div>}
     </Card>
   );
 }

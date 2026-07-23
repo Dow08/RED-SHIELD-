@@ -399,6 +399,29 @@ def save_override(control_id: str, status: str, note: str, attachments=None) -> 
     return ov
 
 
+def import_overrides(data: dict) -> dict:
+    """Remplace l'état GRC (évaluations manuelles + preuves) par `data`, validé.
+
+    Utilisé par la sauvegarde/restauration : on ne fait confiance à rien du fichier
+    importé (statuts filtrés sur STATUSES, notes bornées, pièces jointes nettoyées)."""
+    if not isinstance(data, dict):
+        raise ValueError("état GRC invalide")
+    clean: dict = {}
+    for cid, entry in data.items():
+        if not isinstance(entry, dict):
+            continue
+        e: dict = {"note": str(entry.get("note", ""))[:2000],
+                   "attachments": _clean_attachments(entry.get("attachments"))}
+        if entry.get("status") in STATUSES:
+            e["status"] = entry["status"]
+        if e.get("status") or e["note"] or e["attachments"]:
+            clean[str(cid)[:80]] = e
+    p = _store_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(clean, ensure_ascii=False, indent=2), encoding="utf-8")
+    return clean
+
+
 # ── Export Markdown (rapport d'audit) ─────────────────────────────────────
 _STATUS_LABEL = {
     "conforme": "✅ Conforme", "a_traiter": "🟠 À traiter",
@@ -459,3 +482,11 @@ class GrcModule(Module):
 
     def export(self) -> str:
         return export_markdown(self.posture())
+
+    def export_state(self) -> dict:
+        """État brut (évaluations manuelles + preuves) pour la sauvegarde."""
+        return load_overrides()
+
+    def import_state(self, data: dict) -> dict:
+        """Restaure l'état GRC depuis une sauvegarde (validé)."""
+        return import_overrides(data)

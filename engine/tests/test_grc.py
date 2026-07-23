@@ -110,3 +110,26 @@ def test_set_control_rejects_bad_input(tmp_path, monkeypatch):
         assert False, "aurait dû lever"
     except ValueError:
         pass
+
+
+def test_import_overrides_valide_et_nettoie(tmp_path, monkeypatch):
+    """Sauvegarde/restauration : on ne fait confiance à rien du fichier importé."""
+    monkeypatch.setattr(grc, "_store_path", lambda: tmp_path / "grc_state.json")
+    data = {
+        "mfa": {"status": "conforme", "note": "preuve", "attachments": []},
+        "bad-status": {"status": "n_importe_quoi", "note": "gardé quand même"},
+        "vide": {"status": "auto", "note": "", "attachments": []},   # rien à garder → écarté
+        "pas-un-dict": "ignoré",
+    }
+    out = grc.import_overrides(data)
+    assert out["mfa"]["status"] == "conforme"
+    assert "status" not in out["bad-status"] and out["bad-status"]["note"] == "gardé quand même"
+    assert "vide" not in out and "pas-un-dict" not in out
+    # relecture depuis le disque
+    assert grc.load_overrides()["mfa"]["status"] == "conforme"
+
+
+def test_import_overrides_refuse_non_dict():
+    import pytest
+    with pytest.raises(ValueError):
+        grc.import_overrides(["pas", "un", "dict"])

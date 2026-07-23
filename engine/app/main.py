@@ -4,8 +4,10 @@ Lancer : py -m uvicorn app.main:app --reload  (depuis engine/)
 """
 from __future__ import annotations
 
+import json
 import logging
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -94,6 +96,11 @@ class GrcControlReq(BaseModel):
 
 class ReportMetaReq(BaseModel):
     meta: dict | None = None   # override optionnel (client, périmètre, consultant…)
+
+
+class BackupReq(BaseModel):
+    grc: dict | None = None            # état GRC (évaluations manuelles + preuves)
+    report_draft: dict | None = None   # brouillon de rapport en cours
 
 
 def register_modules(registry: Registry, bus: EventBus) -> None:
@@ -664,6 +671,40 @@ def create_app() -> FastAPI:
     def report_draft_clear():
         mission_report.clear_draft()
         return {"ok": True}
+
+    @app.get("/backup/export", response_class=PlainTextResponse)
+    def backup_export():
+        """Sauvegarde du travail (état GRC + brouillon de rapport). SANS secrets :
+        les clés des connecteurs restent dans le trousseau de l'OS, jamais exportées."""
+        grc = registry.get("grc")
+        bundle = {
+            "app": "RED SHIELD",
+            "version": __version__,
+            "exported_at": datetime.now(timezone.utc).isoformat(),
+            "grc": grc.export_state() if grc is not None else {},
+            "report_draft": mission_report.load_draft(),
+        }
+        return PlainTextResponse(
+            json.dumps(bundle, ensure_ascii=False, indent=2),
+            media_type="application/json",
+            headers={"Content-Disposition": "attachment; filename=red-shield-backup.json"},
+        )
+
+    @app.post("/backup/import")
+    def backup_import(req: BackupReq):
+        restored: list[str] = []
+        grc = registry.get("grc")
+        if req.grc is not None and grc is not None:
+            try:
+                grc.import_state(req.grc)
+                restored.append("conformité (GRC)")
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc))
+        if req.report_draft is not None:
+            mission_report.save_draft(req.report_draft)
+            restored.append("brouillon de rapport")
+        _audit("backup_import", ", ".join(restored) or "rien")
+        return {"ok": True, "restored": restored}
 
     return app
 
