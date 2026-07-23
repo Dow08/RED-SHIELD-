@@ -70,13 +70,15 @@ C'est le vrai chantier : la couche native. Le reste est déjà là.
 Ces objets alimentent le scoring/rapport existants (mêmes formes que le desktop autant que possible).
 
 ## Jalons (3 max, du plus simple au plus complet)
-### Jalon M1 — Le socle « je vois le réseau » _(non rooté)_
+### Jalon M1 — Le socle « je vois le réseau » _(non rooté)_ — ✅ CODE LIVRÉ (2026-07-23)
 Plugin Rust + **cartographie** (hôtes via TCP+mDNS/SSDP, ports, empreinte service, OS-guess), affichée sur carte/liste.
 **Acceptation** : sur un réseau test, l'app liste les hôtes actifs + leurs ports/services ouverts en < 3 min, sur tablette non rootée.
+**État** : `ui/src-tauri/src/recon.rs` (discover_hosts TCP + **SSDP/UPnP**, scan_ports, empreinte bannières), câblé Tauri + routé côté UI (`IS_MOBILE`→`tinvoke`), nav terrain (Recon/Offensif). Reste : compiler l'APK en CI + valider les critères de vitesse sur la tablette. rDNS non porté (pas de reverse DNS dans `std`).
 
-### Jalon M2 — La profondeur « je vois ce que Fing ne voit pas »
+### Jalon M2 — La profondeur « je vois ce que Fing ne voit pas » — ⏳ partiel
 **Énumération web** (ffuf/gobuster-lite) + **audit TLS** + **posture WiFi** + **croisement CVE**.
 **Acceptation** : sur un service web de test, l'app remonte des chemins découverts + un verdict TLS ; un service versionné remonte ses CVE.
+**État** : énum web (`web_enum`) portée en Rust (HTTP ; HTTPS/TLS = desktop en v1). Audit TLS mobile, posture WiFi et croisement CVE mobile = à faire (nécessitent une lib TLS cross-compilée et/ou l'accès WiFi natif Android → à valider en CI/terrain avant de s'engager).
 
 ### Jalon M3 — Le livrable « rapport depuis le terrain »
 **Rapport de mission sur mobile** (réutilise le générateur) + capture **VpnService** (option).
