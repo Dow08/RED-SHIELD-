@@ -16,7 +16,7 @@ Observer le réseau et le poste, corréler les risques, produire le livrable cli
 ![Desktop](https://img.shields.io/badge/desktop-Tauri%20v2-24C8DB)
 ![Air-gapped](https://img.shields.io/badge/air--gapped-par%20défaut-success)
 
-📄 **[Fiche projet](docs/PRESENTATION.md)** · [Journal des modifications](CHANGELOG.md) · [Sécurité](SECURITY.md) · [Contribuer](CONTRIBUTING.md)
+📄 **[Fiche projet](docs/PRESENTATION.md)** · [Journal des modifications](docs/CHANGELOG.md) · [Sécurité](docs/SECURITY.md) · [Contribuer](docs/CONTRIBUTING.md)
 
 </div>
 
@@ -171,7 +171,7 @@ RED SHIELD
 └── .github/workflows/      # Trivy · build desktop · build mobile (Android)
 ```
 
-Détails et conventions : [`CONTRIBUTING.md`](CONTRIBUTING.md) · [`HANDOFF.md`](HANDOFF.md) · [`spec.md`](spec.md).
+Détails et conventions : [`CONTRIBUTING.md`](docs/CONTRIBUTING.md) · [`HANDOFF.md`](docs/HANDOFF.md) · [`spec.md`](docs/spec.md).
 
 ---
 
@@ -239,7 +239,7 @@ La chaîne de **signature de code** est prête (voir [`docs/SIGNING.md`](docs/SI
 - **Exécution système durcie** — validation stricte des entrées, listes blanches de commandes, **aucun `shell` libre**, API liée à `127.0.0.1`.
 - **Interface durcie** — **CSP stricte** sur la WebView (aucun script ni appel externe non autorisé).
 - **Actions système** (couper une connexion, pare-feu, nettoyage, mise à jour) — **dry-run → confirmation → annulation → audit**.
-- **Analyse continue** — **Trivy** et **Dependabot** à chaque push ; voir [`.github/workflows/trivy.yml`](.github/workflows/trivy.yml) et [`SECURITY.md`](SECURITY.md).
+- **Analyse continue** — **Trivy** et **Dependabot** à chaque push ; voir [`.github/workflows/trivy.yml`](.github/workflows/trivy.yml) et [`SECURITY.md`](docs/SECURITY.md).
 
 ---
 
@@ -250,7 +250,7 @@ La chaîne de **signature de code** est prête (voir [`docs/SIGNING.md`](docs/SI
 | ✅ **Livré** | 27 modules · dashboard complet · GRC · rapport de mission · recon natif · installeur desktop (CI) · durcissement sécurité · sauvegarde |
 | 🔄 **En cours** | build & test mobile (Android) · signature de code · certification terrain des fonctions admin (pktmon, Wazuh, IMAP) |
 
-Détail dans le [journal des modifications](CHANGELOG.md).
+Détail dans le [journal des modifications](docs/CHANGELOG.md).
 
 ---
 

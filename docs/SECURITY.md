@@ -25,7 +25,7 @@ plugin recon natif (`ui/src-tauri/`) et les workflows CI (`.github/`).
 
 Rappel d'usage : RED SHIELD réalise du **scan actif**. Il ne doit être utilisé que
 sur des systèmes dont vous êtes propriétaire ou pour lesquels vous disposez d'une
-**autorisation écrite** (voir [`docs/MANDAT-AUTORISATION.md`](docs/MANDAT-AUTORISATION.md)).
+**autorisation écrite** (voir [`MANDAT-AUTORISATION.md`](MANDAT-AUTORISATION.md)).
 L'usage non autorisé est illégal et n'engage que l'utilisateur.
 
 ## Versions supportées
