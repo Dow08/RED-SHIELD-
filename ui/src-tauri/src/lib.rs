@@ -3,6 +3,8 @@ use tauri::Manager;
 use tauri_plugin_shell::process::CommandChild;
 use tauri_plugin_shell::ShellExt;
 
+mod recon;
+
 // Garde le handle du moteur (sidecar) pour le stopper à la fermeture de l'app.
 struct EngineChild(Mutex<Option<CommandChild>>);
 
@@ -10,6 +12,12 @@ struct EngineChild(Mutex<Option<CommandChild>>);
 pub fn run() {
   tauri::Builder::default()
     .plugin(tauri_plugin_shell::init())
+    // Recon natif (mobile) : cartographie / scan / énum web sans moteur Python.
+    .invoke_handler(tauri::generate_handler![
+      recon::discover_hosts,
+      recon::scan_ports,
+      recon::web_enum
+    ])
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(

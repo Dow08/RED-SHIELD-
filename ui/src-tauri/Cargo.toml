@@ -24,3 +24,8 @@ log = "0.4"
 tauri = { version = "2.11.3", features = [] }
 tauri-plugin-log = "2"
 tauri-plugin-shell = "2"
+# Recon natif mobile (portage du moteur netrecon.py) : CIDR + client HTTP bloquant.
+# ureq sans TLS (default-features=false) → pas de rustls/ring → cross-compile Android
+# fiable. Énum web mobile v1 = HTTP (le HTTPS reste côté desktop).
+ipnet = "2"
+ureq = { version = "2", default-features = false }

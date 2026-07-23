@@ -121,6 +121,16 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+// Détection du contexte d'exécution : sur MOBILE (Tauri Android, sans moteur Python),
+// le recon passe par les commandes natives Rust (invoke) ; sinon (web dev / desktop
+// avec sidecar) il passe par HTTP.
+const IS_TAURI = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+export const IS_MOBILE = IS_TAURI && typeof navigator !== "undefined" && /android|iphone|ipad|ipod/i.test(navigator.userAgent);
+async function tinvoke<T>(cmd: string, args: Record<string, unknown>): Promise<T> {
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<T>(cmd, args);
+}
+
 export const api = {
   health: () => get<{ status: string; version: string; airgapped: boolean }>("/health"),
   modules: () => get<ModuleInfo[]>("/modules"),
@@ -155,10 +165,10 @@ export const api = {
   firewallRules: () => get<string[]>("/firewall/rules"),
   scan: () => get<ScanResult>("/scan"),
   scanRun: (target: string, mode: string, bypass = false) => post<{ ok: boolean; error?: string }>("/scan/run", { target, mode, bypass }),
-  netreconDiscover: (cidr: string, bypass = false) => get<NetHost[]>(`/netrecon/discover?cidr=${encodeURIComponent(cidr)}&bypass=${bypass}`),
-  netreconScan: (ip: string, bypass = false) => get<NetPort[]>(`/netrecon/scan?ip=${encodeURIComponent(ip)}&bypass=${bypass}`),
-  netreconWeb: (url: string, bypass = false) => get<NetWebFinding[]>(`/netrecon/web?url=${encodeURIComponent(url)}&bypass=${bypass}`),
-  netreconTls: (host: string, port = 443) => get<NetTls>(`/netrecon/tls?host=${encodeURIComponent(host)}&port=${port}`),
+  netreconDiscover: (cidr: string, bypass = false) => IS_MOBILE ? tinvoke<NetHost[]>("discover_hosts", { cidr }) : get<NetHost[]>(`/netrecon/discover?cidr=${encodeURIComponent(cidr)}&bypass=${bypass}`),
+  netreconScan: (ip: string, bypass = false) => IS_MOBILE ? tinvoke<NetPort[]>("scan_ports", { ip }) : get<NetPort[]>(`/netrecon/scan?ip=${encodeURIComponent(ip)}&bypass=${bypass}`),
+  netreconWeb: (url: string, bypass = false) => IS_MOBILE ? tinvoke<NetWebFinding[]>("web_enum", { url }) : get<NetWebFinding[]>(`/netrecon/web?url=${encodeURIComponent(url)}&bypass=${bypass}`),
+  netreconTls: (host: string, port = 443) => IS_MOBILE ? Promise.resolve<NetTls>({ host, port, ok: false, issuer: "", subject: "", not_after: "", protocol: "", cipher: "", weak: [], error: "audit TLS non disponible sur mobile (v1)" }) : get<NetTls>(`/netrecon/tls?host=${encodeURIComponent(host)}&port=${port}`),
   procvuln: () => get<ProcVulnResult>("/procvuln"),
   procvulnRun: () => post<{ ok: boolean; error?: string }>("/procvuln/run", {}),
   hids: () => get<HidsResult>("/hids"),
