@@ -21,7 +21,7 @@ jobs:
       WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
     steps:
       - name: Récupération du code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Python (pour le sidecar moteur)
         uses: actions/setup-python@v5
