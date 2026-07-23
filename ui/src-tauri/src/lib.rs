@@ -1,6 +1,7 @@
 use std::sync::Mutex;
 use tauri::Manager;
 use tauri_plugin_shell::process::CommandChild;
+#[cfg(desktop)] // ShellExt (sidecar) n'est utilisé que côté desktop
 use tauri_plugin_shell::ShellExt;
 
 mod recon;
