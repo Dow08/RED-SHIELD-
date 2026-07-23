@@ -71,3 +71,24 @@ def test_scan_valid_target():
     assert ScanModule.valid_target("192.168.1.0/24")
     assert ScanModule.valid_target("scanme.nmap.org")
     assert not ScanModule.valid_target("1.1.1.1; whoami")
+    # Durcissement : une cible ne peut pas commencer par « - » (injection d'argument nmap).
+    assert not ScanModule.valid_target("-oX")
+    assert not ScanModule.valid_target("-sS")
+    assert not ScanModule.valid_target("")
+
+
+def test_intel_rejects_invalid_ip(monkeypatch):
+    """L'IP est interpolée dans l'URL VirusTotal : tout non-IP doit être refusé."""
+    from app.core.bus import EventBus
+    from app.modules.intel import IntelModule
+    from app.runtime import runtime
+
+    class _Conn:
+        def get(self, name):
+            return "FAKEKEY"
+
+    monkeypatch.setattr(runtime, "airgapped", False)
+    mod = IntelModule(EventBus(), _Conn())
+    for bad in ["1.2.3.4/../../users", "evil.com", "1.2.3.4?x=1", "../secret", ""]:
+        res = mod.lookup_ip(bad)
+        assert res["available"] is False and res["reason"] == "IP invalide"

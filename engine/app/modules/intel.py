@@ -5,6 +5,8 @@ air-gapped → « non connecté » (jamais de donnée inventée).
 """
 from __future__ import annotations
 
+import ipaddress
+
 from app.core import http
 from app.core.bus import EventBus
 from app.modules.base import Module, ModuleStatus
@@ -27,6 +29,12 @@ class IntelModule(Module):
     def lookup_ip(self, ip: str) -> dict:
         if runtime.airgapped:
             return {"available": False, "reason": "mode air-gapped actif — désactive-le pour interroger les sources", "sources": []}
+        # Durcissement : l'IP est interpolée dans l'URL VirusTotal + envoyée avec la clé
+        # API. On refuse tout ce qui n'est pas une IP valide (pas de chemin/URL injectés).
+        try:
+            ip = str(ipaddress.ip_address(ip))
+        except ValueError:
+            return {"available": False, "reason": "IP invalide", "sources": []}
         sources: list[dict] = []
 
         vt = self._conn.get("virustotal")

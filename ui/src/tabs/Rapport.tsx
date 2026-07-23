@@ -27,8 +27,11 @@ function Editable({ value, onCommit, ph, className, style, rich }: { value: stri
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = ref.current; if (!el) return;
+    // Sanitisation AUSSI au rendu (pas seulement au commit) : une valeur peut venir
+    // d'un brouillon rechargé ou d'un champ dérivé du backend (bannière/CVE) → jamais
+    // d'HTML brut injecté via innerHTML.
     const cur = rich ? el.innerHTML : el.textContent;
-    if (cur !== value) { if (rich) el.innerHTML = value; else el.textContent = value; }
+    if (cur !== value) { if (rich) el.innerHTML = sanitizeHtml(value); else el.textContent = value; }
   }, [value, rich]);
   return (
     <div ref={ref} contentEditable suppressContentEditableWarning

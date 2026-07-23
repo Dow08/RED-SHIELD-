@@ -46,6 +46,7 @@ def test_trace_valid_target():
     assert TraceModule.valid_target("example.com")
     assert not TraceModule.valid_target("1.1.1.1; rm -rf /")
     assert not TraceModule.valid_target("a b")
+    assert not TraceModule.valid_target("-h")   # pas de cible commençant par « - »
 
 
 def test_wifi_parse_classifies_security():

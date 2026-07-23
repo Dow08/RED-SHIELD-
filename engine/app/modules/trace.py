@@ -143,7 +143,9 @@ class TraceModule(Module):
 
     @staticmethod
     def valid_target(target: str) -> bool:
-        return bool(re.match(r"^[A-Za-z0-9_.\-]{1,255}$", target))
+        # Premier caractère alphanumérique obligatoire : interdit une cible commençant
+        # par « - » (sinon tracert/traceroute l'interprète comme une option).
+        return bool(re.match(r"^[A-Za-z0-9][A-Za-z0-9_.\-]{0,254}$", target))
 
     def _cmd(self, target: str) -> list[str]:
         if sys.platform.startswith("win"):

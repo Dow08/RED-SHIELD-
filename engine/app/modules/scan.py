@@ -154,7 +154,9 @@ class ScanModule(Module):
 
     @staticmethod
     def valid_target(target: str) -> bool:
-        return bool(re.match(r"^[A-Za-z0-9_.\-/]{1,64}$", target))
+        # Premier caractère alphanumérique obligatoire : une cible ne peut pas commencer
+        # par « - » (sinon nmap l'interpréterait comme une option → injection d'argument).
+        return bool(re.match(r"^[A-Za-z0-9][A-Za-z0-9_.\-/]{0,63}$", target))
 
     def match_cves(self, product: str, version: str) -> list[Cve]:
         """CVE via NVD en ligne (gated air-gapped). Renvoie [] sous air-gapped."""
