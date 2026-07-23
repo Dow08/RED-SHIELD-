@@ -6,7 +6,7 @@
 
 **Mon poste de commandement réseau — *red + blue*, modulaire, 100 % local.**
 
-Une vision d'ensemble de ma machine en temps réel, et des briques que j'active selon le besoin : surveillance défensive, reconnaissance offensive, SOC, remédiation, conformité et santé du poste — le tout dans un seul dashboard.
+Une vision d'ensemble de ma machine en temps réel, et des briques que j'active selon le besoin : surveillance défensive, reconnaissance offensive, SOC, remédiation, conformité, rapport de mission et santé du poste — le tout dans un seul dashboard.
 
 [![Licence : PolyForm Noncommercial](https://img.shields.io/badge/licence-PolyForm%20Noncommercial%201.0.0-orange)](LICENSE)
 [![Sécurité : Trivy](https://img.shields.io/badge/s%C3%A9curit%C3%A9-Trivy%20CI-blue)](.github/workflows/trivy.yml)
@@ -98,6 +98,7 @@ _Thème « Command Grid », données réelles (rien d'inventé). Air-gapped acti
 ### 🎯 Reconnaissance & offensif (red team)
 
 - **Scan nmap** enrichi : **croisement CVE en ligne (API NVD)**, **décomposition par couche OSI**, mapping **conformité CIS / ANSSI / NIST** par port, et **suggestions d'énumération**.
+- **Cartographie native (sans nmap)** : moteur de reconnaissance portable en **sockets purs** — **découverte d'hôtes** (TCP + **SSDP/UPnP** pour identifier box / IoT / imprimantes), **scan de ports** avec empreinte de services (bannières), **énumération web** façon *ffuf / gobuster* (dictionnaire + détection des faux positifs) et **audit TLS** (protocoles/chiffrements faibles, certificat expiré). C'est exactement la logique portée sur mobile.
 - **Garde-fou de périmètre** : déclare la ou les **cibles autorisées** ; scanner hors périmètre demande une confirmation et est **journalisé** dans la piste d'audit (traçabilité de mission).
 - **Vulnérabilités des applications** installées : versions des process croisées avec les **CVE NVD** en direct.
 - **Audit WiFi** (`netsh` sous Windows) : réseaux, chiffrement, canaux, évaluation du risque — l'alternative légère à aircrack là où je n'ai pas besoin d'injection.
@@ -141,10 +142,17 @@ Le générateur de rapport de consulting, intégré à l'onglet Conformité :
 - **Connecteurs** : clés API **chiffrées via keyring** (jamais en clair), avec **auto-détection** des réglages IMAP.
 - **SIEM / EDR** : client **Wazuh** réel (auth sur l'indexeur, requête `wazuh-alerts-*/_search`), prêt à brancher un lab — les alertes remontent dans le SOC.
 - **Analyse IA** : un **LLM local (Ollama)** ou une API au choix, appliqué aux scans, logs, mails et à la **synthèse de la timeline** — activable seulement hors air-gapped.
+- **Sauvegarde / restauration** : export/import de l'**état de travail** (évaluations GRC + brouillon de rapport) dans un fichier, pour changer de poste sans rien perdre — **sans les secrets** (les clés restent dans le trousseau).
+- **Détection de mise à jour** : signale quand une version plus récente est publiée (via les *releases* GitHub, hors air-gapped).
 
 ### 📱 Moteur mobile autonome
 
-Le mobile n'est **pas** une simple console de consultation : il embarque son **propre moteur, côté client, 100 % hors-ligne** ([`ui/src/mobile/offline.ts`](ui/src/mobile/offline.ts)) — **analyse d'e-mails `.eml`** (SPF/DKIM/DMARC, liens, pièces jointes) et **identification/cassage de hash** (md5/sha1/sha256/sha512 via Web Crypto). Empaqueté en **APK Android** par la CI (Tauri v2), il fonctionne sans le moteur Python.
+Le mobile n'est **pas** une simple console de consultation : il embarque ses **propres moteurs, côté client, sans le moteur Python**.
+
+- **Recon natif (Rust)** : cartographie du réseau — **découverte d'hôtes** (TCP + **SSDP/UPnP**), **scan de ports** et empreinte de services, **énumération web** — via un plugin **Tauri natif**, sans root. L'interface bascule alors en **mode terrain** (onglets Recon + Offensif uniquement).
+- **Analyses hors-ligne** ([`ui/src/mobile/offline.ts`](ui/src/mobile/offline.ts)) : **e-mails `.eml`** (SPF/DKIM/DMARC, liens, pièces jointes) et **identification/cassage de hash** (md5/sha1/sha256/sha512 via Web Crypto).
+
+Empaqueté en **APK Android** par la CI (Tauri v2), il fonctionne 100 % hors-ligne, sans le moteur Python.
 
 ---
 
@@ -157,8 +165,8 @@ RED SHIELD
 ├── engine/                 # Moteur Python (FastAPI)
 │   └── app/
 │       ├── core/           # bus · registry · watchdog
-│       ├── modules/        # 26 briques isolées : shield, scan, trace, hids, defender,
-│       │                   #   mail, imapmail, siem, grc, health, updater, throughput…
+│       ├── modules/        # 27 briques isolées : shield, scan, netrecon, trace, hids,
+│       │                   #   defender, mail, imapmail, siem, grc, health, updater, throughput…
 │       ├── scoring/        # règles de risque · baseline · MITRE
 │       └── main.py         # API + endpoints
 ├── ui/                     # Dashboard React / Vite / Tailwind
@@ -235,6 +243,7 @@ Onglet **Actions** → choisir le workflow → **Run workflow** → l'artefact (
 - **Analyse de sécurité continue** : **Trivy** à chaque push — voir [`.github/workflows/trivy.yml`](.github/workflows/trivy.yml).
 - **Actions système** (couper une connexion, pare-feu, nettoyage, mise à jour) : **dry-run + confirmation + annulation + audit**.
 - **API** liée à `127.0.0.1` ; validation stricte des entrées, listes blanches de commandes, aucun shell libre depuis l'UI.
+- **Interface durcie** : **CSP stricte** sur la WebView (aucun script ni appel externe non autorisé) ; chaîne de **signature de code** prête pour les livrables ([`docs/SIGNING.md`](docs/SIGNING.md)).
 
 ---
 
@@ -242,7 +251,7 @@ Onglet **Actions** → choisir le workflow → **Run workflow** → l'artefact (
 
 ```bash
 # Backend
-cd engine && .venv/Scripts/python.exe -m pytest -q      # 102 tests
+cd engine && .venv/Scripts/python.exe -m pytest -q      # 112 tests
 
 # Frontend
 cd ui && npx vitest run                                  # 7 tests
