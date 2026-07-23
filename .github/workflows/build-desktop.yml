@@ -13,6 +13,12 @@ permissions:
 jobs:
   windows:
     runs-on: windows-latest
+    # Certificat de signature (facultatif) : déposez WINDOWS_CERTIFICATE (PFX en base64)
+    # et WINDOWS_CERTIFICATE_PASSWORD dans les secrets du dépôt. Absents → build NON signé
+    # (comportement actuel, inchangé). Présents → sidecar + installeur signés (voir docs/SIGNING.md).
+    env:
+      WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+      WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
     steps:
       - name: Récupération du code
         uses: actions/checkout@v4
@@ -54,6 +60,35 @@ jobs:
       - name: Dépendances frontend
         working-directory: ui
         run: npm ci
+
+      # Signature du code — S'EXÉCUTE UNIQUEMENT si un certificat est fourni en secret.
+      # Sans secret, cette étape est sautée et le build reste identique à aujourd'hui.
+      - name: Signature (sidecar + config installeur)
+        if: ${{ env.WINDOWS_CERTIFICATE != '' }}
+        working-directory: ui
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          # 1. Décoder le PFX (base64) fourni en secret, l'importer, récupérer l'empreinte.
+          $pfx = Join-Path $env:RUNNER_TEMP "rs-cert.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+          $pw = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+          $cert = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $pw
+          $thumb = $cert.Thumbprint
+          # 2. Localiser signtool (Windows SDK) et signer le sidecar : Tauri ne signe PAS les externalBin.
+          $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe" |
+                      Sort-Object FullName -Descending | Select-Object -First 1 -ExpandProperty FullName
+          & $signtool sign /sha1 $thumb /fd sha256 /tr http://timestamp.digicert.com /td sha256 `
+            "src-tauri/binaries/red-engine-x86_64-pc-windows-msvc.exe"
+          if ($LASTEXITCODE -ne 0) { throw "signtool a échoué sur le sidecar" }
+          # 3. Injecter l'empreinte dans la config Tauri → l'installeur NSIS sera signé au build.
+          $conf = "src-tauri/tauri.conf.json"
+          $json = Get-Content $conf -Raw | ConvertFrom-Json
+          $win = @{ certificateThumbprint = $thumb; digestAlgorithm = "sha256"; timestampUrl = "http://timestamp.digicert.com" }
+          if ($json.bundle.PSObject.Properties.Name -contains 'windows') { $json.bundle.windows = $win }
+          else { $json.bundle | Add-Member -NotePropertyName windows -NotePropertyValue $win }
+          $json | ConvertTo-Json -Depth 30 | Set-Content $conf -Encoding utf8
+          Write-Host "Signature configurée (empreinte $thumb) : sidecar signé, installeur sera signé par Tauri."
 
       - name: Build Tauri (installeur NSIS)
         working-directory: ui
