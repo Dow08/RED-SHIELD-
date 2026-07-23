@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { api } from "../api";
+import { api, IS_MOBILE } from "../api";
 import type { Beacon, ConnectorStatus, CrackResult, HidsResult, IntelResult, LanDevice, LlmResult, MailAnalysis, OsintResult, ScanResult, ScoredConnection, Severity, TimelineEvent, TraceResult, WifiNet } from "../api";
 import { BandwidthChart, NetworkGraph, Sparkline, TraceMap } from "../viz";
 import { SEV_META, bandColor, bandLabel, fr, Card, ReputationButton, CutButton, ClosePortButton, Reorderable, Gauge, ConnRow, DualBar, Mtile, PortChips, AiAnalyzeButton } from "../shared";
@@ -19,6 +19,40 @@ function ScanAiButton({ scan }: { scan: ScanResult }) {
       {res && !res.ok && <div className="disc" style={{ paddingTop: 8, color: "var(--watch)" }}>{res.error} (configure le connecteur LLM)</div>}
       {res?.ok && <div className="rbody" style={{ whiteSpace: "pre-wrap", marginTop: 8, padding: 12, background: "var(--card-solid)", borderRadius: 8 }}>{res.analysis}</div>}
     </div>
+  );
+}
+
+/* ============ DIAGNOSTIC MOBILE (signal de terrain) ============ */
+function NativeSelfTest() {
+  const [out, setOut] = useState<string>("");
+  const [busy, setBusy] = useState(false);
+  const test = async () => {
+    setBusy(true);
+    const L: string[] = [];
+    try {
+      L.push(`IS_MOBILE = ${IS_MOBILE}`);
+      L.push(`Tauri present = ${typeof window !== "undefined" && "__TAURI_INTERNALS__" in window}`);
+      L.push(`secureContext = ${typeof isSecureContext !== "undefined" ? isSecureContext : "?"}`);
+      L.push(`crypto.subtle = ${typeof crypto !== "undefined" && !!crypto?.subtle}`);
+      L.push(`UA = ${navigator.userAgent.slice(0, 60)}`);
+    } catch (e) { L.push("erreur env: " + String(e)); }
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      L.push("import invoke ✓");
+      const r = await invoke("discover_hosts", { cidr: "127.0.0.1/32" });
+      L.push("discover_hosts OK → " + JSON.stringify(r).slice(0, 250));
+    } catch (e) {
+      L.push("❌ ERREUR invoke : " + String(e).slice(0, 400));
+    }
+    setOut(L.join("\n"));
+    setBusy(false);
+  };
+  return (
+    <Card title="🔧 Diagnostic moteur natif" right="mobile">
+      <div className="note">Si le recon ne fonctionne pas : lance ce test et <b>envoie-moi le résultat en capture</b>. Il me dit exactement ce qui bloque.</div>
+      <div className="actions"><button className="btn" onClick={test} disabled={busy}>{busy ? "Test…" : "Tester le moteur natif"}</button></div>
+      {out && <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", padding: 12, margin: "0 16px 12px", fontSize: 11, fontFamily: "var(--mono)", color: "var(--soft)", background: "var(--card-solid)", borderRadius: 8 }}>{out}</pre>}
+    </Card>
   );
 }
 
@@ -167,6 +201,7 @@ export default function Recon({ lan, scan, procvuln, onScan }: { lan: LanDevice[
   return (
     <div className="grid">
       <div className="col">
+        {IS_MOBILE && <NativeSelfTest />}
         <NetreconCard />
         <Card title="Scan hôte (nmap + CVE)" right={scan && scan.nmap_available === false ? "nmap absent" : "prêt"}>
           <div className="note">Cibles <b>autorisées uniquement</b> (propriété ou autorisation écrite). Chaque service détecté est croisé avec <b>NVD en ligne</b> (source officielle, à jour) → lien NVD. Nécessite <b>air-gapped OFF</b>.</div>
