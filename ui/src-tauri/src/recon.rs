@@ -5,11 +5,17 @@
 //! remplacent les endpoints `/netrecon/*` du desktop, avec la même logique et les mêmes
 //! formes de données.
 //!
+//! Découverte : TCP « signe de vie » + SSDP/UPnP (identification box/IoT/imprimantes,
+//! ce que RED SHIELD voit « au-delà de Fing »). Le DNS inverse et l'audit TLS restent
+//! côté desktop en v1 (pas de reverse DNS dans `std`, TLS retiré pour un cross-compile
+//! Android fiable).
+//!
 //! ⚠️ Action ACTIVE (connexions vers la cible) : à n'utiliser que sur cible autorisée.
 
+use std::collections::{HashMap, HashSet};
 use std::io::{Read, Write};
-use std::net::{IpAddr, TcpStream, ToSocketAddrs};
-use std::time::Duration;
+use std::net::{IpAddr, TcpStream, ToSocketAddrs, UdpSocket};
+use std::time::{Duration, Instant};
 
 use serde::Serialize;
 
@@ -121,6 +127,42 @@ fn grab_banner(ip: &str, port: u16) -> (String, String) {
     (text.chars().take(300).collect(), product)
 }
 
+/// SSDP / UPnP (M-SEARCH multicast) → { ip: description serveur }.
+/// Identifie box, TV, imprimantes, objets connectés sans root — c'est ce que voit
+/// RED SHIELD « au-delà de Fing ». Silencieux si le multicast est indisponible.
+fn ssdp_probe(timeout_ms: u64) -> HashMap<String, String> {
+    let mut found: HashMap<String, String> = HashMap::new();
+    let sock = match UdpSocket::bind("0.0.0.0:0") {
+        Ok(s) => s,
+        Err(_) => return found,
+    };
+    let _ = sock.set_read_timeout(Some(Duration::from_millis(500)));
+    let msg = "M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\n\
+               MAN: \"ssdp:discover\"\r\nMX: 1\r\nST: ssdp:all\r\n\r\n";
+    if sock.send_to(msg.as_bytes(), "239.255.255.250:1900").is_err() {
+        return found;
+    }
+    let deadline = Instant::now() + Duration::from_millis(timeout_ms);
+    let mut buf = [0u8; 2048];
+    while Instant::now() < deadline {
+        match sock.recv_from(&mut buf) {
+            Ok((n, addr)) => {
+                let ip = addr.ip().to_string();
+                let text = String::from_utf8_lossy(&buf[..n]);
+                let mut desc = String::new();
+                for line in text.lines() {
+                    if line.to_lowercase().starts_with("server:") {
+                        desc = line[7..].trim().to_string();
+                    }
+                }
+                found.entry(ip).or_insert(desc); // premier vu conservé (comme setdefault)
+            }
+            Err(_) => break, // timeout de lecture → plus de réponse en attente
+        }
+    }
+    found
+}
+
 fn ureq_get(url: &str) -> (u16, usize) {
     match ureq::get(url).timeout(Duration::from_secs(4)).call() {
         Ok(r) => {
@@ -136,6 +178,17 @@ fn ureq_get(url: &str) -> (u16, usize) {
 #[tauri::command]
 pub fn discover_hosts(cidr: String) -> Vec<Host> {
     let ips = parse_targets(&cidr);
+    if ips.is_empty() {
+        return Vec::new();
+    }
+    // SSDP seulement sur une vraie plage (identification d'équipements du LAN),
+    // pas sur une cible unique — comme le moteur Python.
+    let ssdp = if ips.len() > 1 {
+        ssdp_probe(2000)
+    } else {
+        HashMap::new()
+    };
+
     let mut alive: Vec<(String, Vec<u16>)> = Vec::new();
     for chunk in ips.chunks(128) {
         let results: Vec<Option<(String, Vec<u16>)>> = std::thread::scope(|s| {
@@ -157,15 +210,31 @@ pub fn discover_hosts(cidr: String) -> Vec<Host> {
         });
         alive.extend(results.into_iter().flatten());
     }
+
+    // Ajoute les hôtes vus en SSDP mais sans port « signe de vie » ouvert
+    // (uniquement s'ils font partie de la cible demandée).
+    let seen: HashSet<&String> = alive.iter().map(|(ip, _)| ip).collect();
+    let in_range: HashSet<&String> = ips.iter().collect();
+    let extra: Vec<String> = ssdp
+        .keys()
+        .filter(|ip| !seen.contains(ip) && in_range.contains(ip))
+        .cloned()
+        .collect();
+    alive.extend(extra.into_iter().map(|ip| (ip, Vec::new())));
+
     alive.sort_by(|a, b| a.0.cmp(&b.0));
     alive
         .into_iter()
-        .map(|(ip, open_ports)| Host {
-            ip,
-            hostname: String::new(),
-            open_ports,
-            device: String::new(),
-            source: "tcp".into(),
+        .map(|(ip, open_ports)| {
+            let device = ssdp.get(&ip).cloned().unwrap_or_default();
+            let source = if ssdp.contains_key(&ip) { "ssdp" } else { "tcp" };
+            Host {
+                ip,
+                hostname: String::new(),
+                open_ports,
+                device,
+                source: source.into(),
+            }
         })
         .collect()
 }
