@@ -33,7 +33,7 @@ jobs:
           java-version: "17"
 
       - name: SDK Android
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
 
       - name: NDK Android (requis par Tauri mobile)
         run: |
