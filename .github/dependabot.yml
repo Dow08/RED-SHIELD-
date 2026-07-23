@@ -1,0 +1,39 @@
+# Mises à jour de dépendances automatiques (complète le scan Trivy : Trivy détecte,
+# Dependabot propose les montées de version en PR). Regroupées, hebdomadaires.
+version: 2
+updates:
+  # Backend Python (moteur)
+  - package-ecosystem: "pip"
+    directory: "/engine"
+    schedule:
+      interval: "weekly"
+    groups:
+      python:
+        patterns: ["*"]
+    open-pull-requests-limit: 5
+
+  # Frontend (interface React/Vite)
+  - package-ecosystem: "npm"
+    directory: "/ui"
+    schedule:
+      interval: "weekly"
+    groups:
+      frontend:
+        patterns: ["*"]
+    open-pull-requests-limit: 5
+
+  # Plugin natif Tauri (Rust)
+  - package-ecosystem: "cargo"
+    directory: "/ui/src-tauri"
+    schedule:
+      interval: "weekly"
+    groups:
+      rust:
+        patterns: ["*"]
+    open-pull-requests-limit: 5
+
+  # Actions GitHub (CI)
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
