@@ -13,7 +13,12 @@ Ce projet suit [SemVer](https://semver.org/lang/fr/).
 - Tuyauterie de signature de code Windows (inerte tant qu'aucun certificat n'est fourni).
 
 ### Ajouté
-- Politique de sécurité (`SECURITY.md`), Dependabot, modèle de mandat d'autorisation.
+- **Sauvegarde / restauration** de l'état de travail (évaluations GRC + brouillon de
+  rapport) — export/import JSON, sans secrets. Onglet Connecteurs.
+- **Détection de mise à jour** : bannière quand une release GitHub plus récente existe
+  (gated air-gapped, install manuelle).
+- Politique de sécurité (`SECURITY.md`), Dependabot, modèle de mandat d'autorisation
+  (`docs/MANDAT-AUTORISATION.md`), guide de signature (`docs/SIGNING.md`).
 
 ## [0.1.0] — 2026-07-23
 
