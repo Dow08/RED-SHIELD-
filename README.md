@@ -10,11 +10,13 @@ Une vision d'ensemble de ma machine en temps réel, et des briques que j'active 
 
 [![Licence : PolyForm Noncommercial](https://img.shields.io/badge/licence-PolyForm%20Noncommercial%201.0.0-orange)](LICENSE)
 [![Sécurité : Trivy](https://img.shields.io/badge/s%C3%A9curit%C3%A9-Trivy%20CI-blue)](.github/workflows/trivy.yml)
-![Tests](https://img.shields.io/badge/tests-102%20pytest%20%2B%207%20vitest-brightgreen)
+![Tests](https://img.shields.io/badge/tests-112%20pytest%20%2B%207%20vitest-brightgreen)
 ![Backend](https://img.shields.io/badge/backend-Python%203.11%2B%20·%20FastAPI-3776AB)
 ![Frontend](https://img.shields.io/badge/frontend-React%2018%20·%20Vite%20·%20Tailwind-61DAFB)
 ![Desktop](https://img.shields.io/badge/desktop-Tauri%20v2-24C8DB)
 ![Air-gapped](https://img.shields.io/badge/air--gapped-par%20défaut-success)
+
+📄 **[Fiche projet (one-pager)](docs/PRESENTATION.md)** · [Journal des modifications](CHANGELOG.md) · [Sécurité](SECURITY.md)
 
 </div>
 
