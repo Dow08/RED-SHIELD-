@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api } from "./api";
+import { api, IS_MOBILE } from "./api";
 import type { Severity } from "./api";
 import { usePolling } from "./hooks";
 import { CyberBackground } from "./viz";
@@ -30,8 +30,13 @@ const TABS: [string, string, string?][] = [
   ["diagnostic", "Diagnostic"],
 ];
 
+// Mise en page mobile : nav réduite aux onglets utilisables sans moteur Python
+// (recon natif + cracker offline). `?mobile=1` force l'aperçu depuis un navigateur.
+const MOBILE_UI = IS_MOBILE || (typeof location !== "undefined" && new URLSearchParams(location.search).has("mobile"));
+const MOBILE_TABS = new Set(["recon", "offensif"]);
+
 export default function App() {
-  const [tab, setTab] = useState("dashboard");
+  const [tab, setTab] = useState(MOBILE_UI ? "recon" : "dashboard");
   const [showAirgapHelp, setShowAirgapHelp] = useState(false);
   const [sevFilter, setSevFilter] = useState<Record<Severity, boolean>>({ safe: true, watch: true, suspect: true, crit: true });
   const health = usePolling(api.health, 10000);
@@ -113,10 +118,11 @@ export default function App() {
         <button className="pill" style={{ cursor: "pointer", padding: "7px 11px", fontWeight: 700 }} title="C'est quoi le mode air-gapped ?" onClick={() => setShowAirgapHelp(true)}>?</button>
       </div>
 
-      {offline && <div className="note" style={{ borderRadius: 12, marginBottom: 12 }}>⚠️ Moteur injoignable sur <b>127.0.0.1:8787</b>. Lance le backend : <span className="mono">py -m uvicorn app.main:app</span> (depuis <span className="mono">engine/</span>).</div>}
+      {offline && !MOBILE_UI && <div className="note" style={{ borderRadius: 12, marginBottom: 12 }}>⚠️ Moteur injoignable sur <b>127.0.0.1:8787</b>. Lance le backend : <span className="mono">py -m uvicorn app.main:app</span> (depuis <span className="mono">engine/</span>).</div>}
+      {MOBILE_UI && <div className="note" style={{ borderRadius: 12, marginBottom: 12 }}>📱 <b>Mode terrain (mobile)</b> — recon natif embarqué (sans moteur Python). Les modules d'analyse du poste (Dashboard, Bouclier, Santé…) sont réservés à la version desktop.</div>}
 
       <div className="nav">
-        {TABS.map(([id, label, mini]) => (
+        {TABS.filter(([id]) => !MOBILE_UI || MOBILE_TABS.has(id)).map(([id, label, mini]) => (
           <button key={id} className={`navb ${tab === id ? "active" : ""}`} onClick={() => setTab(id)}>{label}{mini && <span className="mini">{mini}</span>}</button>
         ))}
       </div>
