@@ -224,6 +224,7 @@ export const api = {
   grcExportUrl: BASE + "/grc/export",
   reportUrl: BASE + "/report/markdown",
   logsExportUrl: BASE + "/diagnostic/logs/export",
+  updateCheck: () => get<{ available: boolean; current: string; latest?: string; update_available?: boolean; url?: string; reason?: string }>("/update/check"),
   backupExportUrl: BASE + "/backup/export",
   backupImport: async (bundle: { grc?: unknown; report_draft?: unknown }): Promise<{ ok: boolean; restored: string[] }> => {
     const res = await fetch(BASE + "/backup/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(bundle) });

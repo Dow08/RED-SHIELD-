@@ -87,6 +87,10 @@ export default function App() {
 
   const offline = connections.error && !connections.data;
 
+  // Détection de mise à jour (via le moteur, gated air-gapped) — awareness, install manuelle.
+  const [update, setUpdate] = useState<{ update_available?: boolean; latest?: string; url?: string } | null>(null);
+  useEffect(() => { if (!airgapped && !MOBILE_UI) api.updateCheck().then(setUpdate).catch(() => {}); }, [airgapped]);
+
   return (
     <>
     <CyberBackground />
@@ -119,6 +123,7 @@ export default function App() {
       </div>
 
       {offline && !MOBILE_UI && <div className="note" style={{ borderRadius: 12, marginBottom: 12 }}>⚠️ Moteur injoignable sur <b>127.0.0.1:8787</b>. Lance le backend : <span className="mono">py -m uvicorn app.main:app</span> (depuis <span className="mono">engine/</span>).</div>}
+      {update?.update_available && <div className="note" style={{ borderRadius: 12, marginBottom: 12, borderColor: "var(--accent)" }}>🔔 <b>Version {update.latest} disponible</b> (tu utilises une version antérieure). {update.url && <a href={update.url} target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>Voir la release →</a>}</div>}
       {MOBILE_UI && <div className="note" style={{ borderRadius: 12, marginBottom: 12 }}>📱 <b>Mode terrain (mobile)</b> — recon natif embarqué (sans moteur Python). Les modules d'analyse du poste (Dashboard, Bouclier, Santé…) sont réservés à la version desktop.</div>}
 
       <div className="nav">

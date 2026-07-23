@@ -15,6 +15,7 @@ from fastapi.responses import PlainTextResponse
 
 from app import __version__
 from app.config import settings
+from app.core import http
 from app.core.bus import EventBus
 from app.core.registry import Registry
 from pydantic import BaseModel
@@ -53,6 +54,13 @@ from app.report import mission as mission_report
 from app.report.mission import build_model
 
 logging.basicConfig(level=logging.INFO)
+
+
+def _ver_tuple(v: str) -> tuple[int, ...]:
+    """Version « 0.1.0 » → (0, 1, 0) pour comparaison. Tolérant (ignore préfixes/suffixes)."""
+    import re
+    nums = re.findall(r"\d+", v or "")
+    return tuple(int(x) for x in nums[:3]) if nums else (0,)
 
 
 class AirgapReq(BaseModel):
@@ -671,6 +679,27 @@ def create_app() -> FastAPI:
     def report_draft_clear():
         mission_report.clear_draft()
         return {"ok": True}
+
+    @app.get("/update/check")
+    def update_check():
+        """Détection de mise à jour : compare la version locale à la dernière release
+        GitHub. Passe par le moteur (pas la WebView) → conforme à la CSP. Gated air-gapped.
+        Awareness seulement : l'installation reste manuelle (pas d'auto-update sans
+        infrastructure de signature — voir docs/SIGNING.md)."""
+        if runtime.airgapped:
+            return {"available": False, "reason": "mode air-gapped actif", "current": __version__}
+        r = http.get("https://api.github.com/repos/Dow08/RED-SHIELD-/releases/latest", timeout=10)
+        if r.error or r.status_code != 200:
+            reason = r.error or (f"HTTP {r.status_code}" if r.status_code != 404 else "aucune release publiée")
+            return {"available": False, "reason": reason, "current": __version__}
+        try:
+            data = r.json()
+            latest = str(data.get("tag_name", "")).lstrip("vV")
+            newer = _ver_tuple(latest) > _ver_tuple(__version__)
+            return {"available": True, "current": __version__, "latest": latest,
+                    "update_available": newer, "url": data.get("html_url", "")}
+        except Exception as exc:
+            return {"available": False, "reason": str(exc), "current": __version__}
 
     @app.get("/backup/export", response_class=PlainTextResponse)
     def backup_export():
